@@ -107,8 +107,6 @@
             // clearDirectoryCheckbox
             // 
             this.clearDirectoryCheckbox.AutoSize = true;
-            this.clearDirectoryCheckbox.Checked = true;
-            this.clearDirectoryCheckbox.CheckState = System.Windows.Forms.CheckState.Checked;
             this.clearDirectoryCheckbox.Location = new System.Drawing.Point(26, 97);
             this.clearDirectoryCheckbox.Name = "clearDirectoryCheckbox";
             this.clearDirectoryCheckbox.Size = new System.Drawing.Size(283, 17);
@@ -132,6 +130,7 @@
             this.Controls.Add(this.openInputButton);
             this.Name = "MainForm";
             this.Text = "Проверка работы";
+            this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.MainForm_FormClosed);
             this.ResumeLayout(false);
             this.PerformLayout();
 

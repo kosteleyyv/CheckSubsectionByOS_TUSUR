@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Office.Interop.Word;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -8,6 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Xml.Serialization;
 
 namespace CheckSubsectionByOS_TUSUR
 {
@@ -17,12 +19,27 @@ namespace CheckSubsectionByOS_TUSUR
         {
             InitializeComponent();
 
-            openInputPathTextBox.Text = inputPath;
-            openOutPutPathTextBox.Text = outputPath;
+            if (File.Exists("params.xml"))
+            {
+
+               XmlSerializer xmlSerializer = new XmlSerializer(typeof(Params));
+
+                // десериализуем объект
+                using (FileStream fs = new FileStream("params.xml", FileMode.OpenOrCreate))
+                {
+                    parameters = xmlSerializer.Deserialize(fs) as Params;
+                }
+            }
+            openInputPathTextBox.Text = parameters.InputPath;
+            openOutPutPathTextBox.Text = parameters.OutputPath;
+        }
+        Params parameters = new Params();
+         public class Params
+        {
+            public  string InputPath { get; set; } = "F:\\input";
+            public  string OutputPath { get; set; } = "F:\\output";
         }
 
-        string inputPath = "F:\\input";
-        string outputPath = "F:\\output";
         private void openInputButton_Click(object sender, EventArgs e)
         {
             FolderBrowserDialog folderBrowserDialog = new FolderBrowserDialog();
@@ -88,6 +105,7 @@ namespace CheckSubsectionByOS_TUSUR
             catch 
             {
                 MessageBox.Show("Не могу очистить директорию сохранения, возможно открыт файл!");
+                return;
             }
 
 
@@ -106,6 +124,7 @@ namespace CheckSubsectionByOS_TUSUR
             catch
             {
                 MessageBox.Show("Не могу скопировать документы в директорию сохранения, возможно открыт файл!");
+                return;
             }
 
             files = System.IO.Directory.GetFiles(openOutPutPathTextBox.Text, "*.docx", SearchOption.AllDirectories);
@@ -123,7 +142,7 @@ namespace CheckSubsectionByOS_TUSUR
                         
                         MessageBox.Show("Проблема с обработкой документа:"+ exp.Message);
 
-                        throw;
+                       // throw;
                     }
                 }
 
@@ -134,6 +153,19 @@ namespace CheckSubsectionByOS_TUSUR
                 MessageBox.Show("Документы формата docx не найдены!");
             }
  
+        }
+
+        private void MainForm_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            XmlSerializer xmlSerializer = new XmlSerializer(typeof(Params));
+
+            // десериализуем объект
+            using (FileStream fs = new FileStream("params.xml", FileMode.Create))
+            {
+                parameters.InputPath = openInputPathTextBox.Text;
+                parameters.OutputPath = openOutPutPathTextBox.Text;
+                xmlSerializer.Serialize(fs, parameters);
+            }
         }
     }
 }
