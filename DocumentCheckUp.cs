@@ -221,7 +221,7 @@ namespace CheckSubsectionByOS_TUSUR
 
                 if ((text.StartsWith("\t") || text.StartsWith(" ")))
                 {
-                    paragraphInfo.Problems.Add("убрать пробел или табуляцию в начале слова");
+                    paragraphInfo.Problems.Add("убрать пробел или табуляцию в начале предложения");
                 }
 
 
