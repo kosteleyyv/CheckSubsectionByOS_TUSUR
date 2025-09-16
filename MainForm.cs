@@ -32,12 +32,15 @@ namespace CheckSubsectionByOS_TUSUR
             }
             openInputPathTextBox.Text = parameters.InputPath;
             openOutPutPathTextBox.Text = parameters.OutputPath;
+            dateStartScanPicker.Value = parameters.ScanDateFrom;
         }
         Params parameters = new Params();
          public class Params
         {
             public  string InputPath { get; set; } = "F:\\input";
             public  string OutputPath { get; set; } = "F:\\output";
+
+            public DateTime ScanDateFrom { get; set; } = DateTime.Now;
         }
 
         private void openInputButton_Click(object sender, EventArgs e)
@@ -164,7 +167,100 @@ namespace CheckSubsectionByOS_TUSUR
             {
                 parameters.InputPath = openInputPathTextBox.Text;
                 parameters.OutputPath = openOutPutPathTextBox.Text;
+                parameters.ScanDateFrom = dateStartScanPicker.Value;
                 xmlSerializer.Serialize(fs, parameters);
+            }
+        }
+ private void checkFullDirButton_Click(object sender, EventArgs e)
+        {
+            string startDir = System.IO.File.ReadAllText(openInputPathTextBox.Text);
+
+            string[] files = Directory.EnumerateFiles(startDir, "*.docx", SearchOption.AllDirectories).ToArray();
+
+            string pattern = "__";
+
+            foreach (string currentFile in files)
+            {
+                if (new System.IO.FileInfo(currentFile).CreationTime >= dateStartScanPicker.Value &&
+                    !new System.IO.FileInfo(currentFile).Name.StartsWith(pattern))
+                {
+                    string directory = new System.IO.FileInfo(currentFile).DirectoryName;
+                    string fileName = new System.IO.FileInfo(currentFile).Name;
+                    string outFileName = directory + "\\" + pattern + fileName;
+
+                    try
+                    {
+                        System.IO.File.Copy(currentFile, outFileName, true);
+                    }
+                    catch
+                    {
+                        MessageBox.Show("Не могу скопировать документы в директорию сохранения, возможно открыт файл!");
+                        return;
+                    }
+
+                    try
+                    {
+                        DocumentCheckUp.checkDocument(outFileName);
+                    }
+                    catch (Exception exp)
+                    {
+
+                        MessageBox.Show("Проблема с обработкой документа:" + exp.Message);
+
+                        // throw;
+                    }
+                }
+            }
+
+
+            MessageBox.Show("Проверка завершена!");
+
+        }
+
+        private void checkOneWorkButton_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog openFileDialog = new OpenFileDialog();
+            openFileDialog.Filter = "документ подраздела|*.docx";
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                string pattern = "__";
+                string currentFile = openFileDialog.FileName;
+                string directory = new System.IO.FileInfo(currentFile).DirectoryName;
+                string fileName = new System.IO.FileInfo(currentFile).Name;
+                string outFileName = directory + "\\" + pattern + fileName;
+
+                try
+                {
+                    System.IO.File.Copy(currentFile, outFileName, true);
+                }
+                catch
+                {
+                    MessageBox.Show("Не могу скопировать документы в директорию сохранения, возможно открыт файл!");
+                    return;
+                }
+
+                try
+                {
+                    DocumentCheckUp.checkDocument(outFileName);
+                    filePathTextBox.Text = outFileName;
+                    MessageBox.Show("Проверка завершена!");                    
+                }
+                catch (Exception exp)
+                {
+
+                    MessageBox.Show("Проблема с обработкой документа:" + exp.Message);
+
+                    // throw;
+                }
+
+                // TODO добавлено замечание про удаление гиперссылок на web-страницы
+                // TODO добавлено замечание запрете на использование Хабра и Википедии в качестве источников
+                // TODO добавлено условие (нам)|(вам)|(Нам)|(Вам) в регулярное выражения проверки на обезличивание
+                // TODO добавлен маркер длинного тире для определения маркированного списка
+                // TODO добавлены рекомендации по типам маркеров
+                // TODO проверка наличия табуляции в тексте
+                // TODO уточнено условие по именам с оператором простанства имен
+                // TODO уточнено условие по наличию точки после номера раздела
             }
         }
     }

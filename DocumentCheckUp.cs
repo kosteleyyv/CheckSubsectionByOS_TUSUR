@@ -96,7 +96,7 @@ namespace CheckSubsectionByOS_TUSUR
 
         private static string GetFirstWord(Microsoft.Office.Interop.Word.Range range)
         {
-            var regex = new System.Text.RegularExpressions.Regex("[1-9a-zа-я•–▪o\\-]");
+            var regex = new System.Text.RegularExpressions.Regex("[1-9a-zа-я\\u2022\\u25aa\\u006f\\u2014\\u2013\\u202d]");
             for (int i = 1; i <= range.Words.Count; i++)
             {
                 string word = range.Words[i].Text.Trim().ToLower();
@@ -118,6 +118,35 @@ namespace CheckSubsectionByOS_TUSUR
             if (text.Length != 0 && text[text.Length - 1] != '.')
             {
                 paragraphInfo.Problems.Add("должна быть точка в конце абзаца");
+            }
+
+            string[] denyURLs = new string[] { "wikipedia.org", "habr.com"  };
+            bool hasDenyURLs = false;
+            for (int i = 0; i < denyURLs.Length; i++)
+            {
+                var range = paragraph.Range;
+                var find = range.Find;
+                find.ClearFormatting();
+                find.Text = denyURLs[i];
+
+                
+                while (find.Execute())
+                {
+                    if (range.End > paragraph.Range.End)
+                    {
+                        break;
+                    }
+                    hasDenyURLs = true;
+                    range.HighlightColorIndex = WdColorIndex.wdYellow;
+                    range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
+
+                }
+            }
+
+            if (hasDenyURLs)
+            {
+                paragraphInfo.Problems.Add("нельзя использовать Википедию или Хабр в качестве источников, как и другие noname-сайты. " +
+                                           "Используем учебники, официальную документацию или другие источники, написанные признанными специалистами.");
             }
         }
 
@@ -191,9 +220,16 @@ namespace CheckSubsectionByOS_TUSUR
                 {
                     text = text.Trim();
 
-                    var regexMarker = new Regex("[•–▪o\\-]");
+                    var regexMarker = new Regex("[\\u2022\\u25aa\\u006f\\u2014\\u2013\\u202d]");
 
-                    var regexMarkerWithWS = new Regex("[••–▪o\\-][\\s]");
+                    var regexMarkerWithWS = new Regex("[\\u2022\\u25aa\\u006f\\u2014\\u2013\\u202d][\\s]");
+
+                    var regexMarkerAdvance = new Regex("[\u2013\u2022\u25aa]");
+
+                    if (regexMarkerWithWS.IsMatch(text))
+                    {
+                        paragraphInfo.Problems.Add("рекомендуемый тип маркера списка: тире(–), точка(•), квадрат(▪)");
+                    }                    
 
                     if (regexMarkerWithWS.IsMatch(text))
                     {
@@ -204,6 +240,8 @@ namespace CheckSubsectionByOS_TUSUR
                         text = regexMarker.Replace(text, "");
                         paragraphInfo.Problems.Add("между маркером и предложением должен быть отступ в виде пробела или табуляции");
                     }
+
+                   
                 }
             }
 
@@ -277,7 +315,7 @@ namespace CheckSubsectionByOS_TUSUR
             }
 
             // слова я или мы или вы
-            var regex = new Regex("([^a-zA-Zа-яА-Я]|^)((я)|(Я)|(мы)|(Мы)|(вы)|(Вы))[^a-zA-Zа-яА-Я]");
+            var regex = new Regex("([^a-zA-Zа-яА-Я]|^)((я)|(Я)|(мы)|(Мы)|(вы)|(Вы)|(нам)|(вам)|(Нам)|(Вам))[^a-zA-Zа-яА-Я]");
 
             if (regex.IsMatch(text))
             {
@@ -339,6 +377,7 @@ namespace CheckSubsectionByOS_TUSUR
 
                 documentParams.HasReference = true;
 
+                
                 Regex[] variants = new[] {
                     new Regex("[\\S]\\[[0-9]{1,3}\\]"),     // между ссылкой и словом нет пробела
                     new Regex("[.][\\s]?\\[[0-9]{1,3}\\]"), // перед ссылкой точка
@@ -479,7 +518,7 @@ namespace CheckSubsectionByOS_TUSUR
                 }
             }
 
-            regex = new Regex("[^«][a-zA-Zа-яА-Я]*::[a-zA-Zа-яА-Я]*[^»]");
+            regex = new Regex("[^«][a-zA-Zа-яА-Я]+::[a-zA-Zа-яА-Я]+[^»]");
 
             if (regex.IsMatch(text))
             {
@@ -624,6 +663,61 @@ namespace CheckSubsectionByOS_TUSUR
                     }
                 }
             }
+
+            bool denyHyperlinks = false;
+
+            if (paragraph.Range.Hyperlinks.Count != 0)
+            {
+                for (int i = 1; i <= paragraph.Range.Hyperlinks.Count; i++)
+                {
+                    string url = paragraph.Range.Hyperlinks[i].Address;
+
+                    if (url != null)
+                    {
+                        paragraph.Range.Hyperlinks[i].Range.HighlightColorIndex = WdColorIndex.wdYellow;
+                        denyHyperlinks = true;
+                    }
+                }
+            }
+
+            if (denyHyperlinks)
+            {
+                paragraphInfo.Problems.Add("убрать гиперссылки на интернет-страницы из текста." +
+                    "Прим. Ссылкой на источник является текст вида [1], который может определять только перекрестную ссылку на элемент списка литературы (номер списка), а не переход по URL-ссылки");
+            }
+
+
+            regex = new Regex("\\t");
+
+            if (regex.IsMatch(text))
+            {
+                var matches = regex.Matches(text);
+
+                paragraphInfo.Problems.Add("убрать знак табуляции внутри текста");
+
+                for (int i = 0; i < matches.Count; i++)
+                {
+                    var range = paragraph.Range;
+                    var find = range.Find;
+                    find.ClearFormatting();
+                    find.Text = matches[i].Value;
+
+                    while (find.Execute())
+                    {
+                        if (range.End > paragraph.Range.End)
+                        {
+                            break;
+                        }
+
+                        var newRange = paragraph.Range;
+                        newRange.Start = range.Start - 1;
+                        newRange.End = range.End +1;
+
+                        newRange.HighlightColorIndex = WdColorIndex.wdYellow;
+                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
+                    }
+                }
+            }
         }
 
         static string checkHeader(Paragraph paragraph, ParagraphInfo paragraphInfo, DocumentParams documentParams)
@@ -650,6 +744,14 @@ namespace CheckSubsectionByOS_TUSUR
 
                 string marker = regexNumber.Match(headerText).Value;
 
+                if (marker.EndsWith("."))
+                {
+                    paragraphInfo.Problems.Add("не должно быть точки на конце номера раздела или подраздела");
+
+                    regexNumber = new Regex("[1-9]([.][1-9][0-9]*)*[.].");
+                    marker = regexNumber.Match(headerText).Value;
+                }
+
                 if (!new Regex("[\\s]").IsMatch(marker[marker.Length - 1] + ""))
                 {
                     paragraphInfo.Problems.Add("между номером заголовка и текстом заголовка должен быть пробел или табуляция");
@@ -657,12 +759,7 @@ namespace CheckSubsectionByOS_TUSUR
 
                 marker = marker.Trim();
 
-                if (marker.EndsWith("."))
-                {
-                    paragraphInfo.Problems.Add("не должно быть точки на конце номера раздела или подраздела");
-                }
-
-                text = new Regex("[1-9]([.][1-9][0-9]*)*[\\s]").Replace(text, "");
+                text = new Regex("[1-9]([.][1-9][0-9]*)*[.]?[\\s]?").Replace(text, "");
 
                 levelNumber = marker.Split(".".ToCharArray(), StringSplitOptions.RemoveEmptyEntries)[0];
             }
@@ -756,7 +853,7 @@ namespace CheckSubsectionByOS_TUSUR
 
             if (text.Length > 0 && !Char.IsUpper(text[0]))
             {
-                paragraphInfo.Problems.Add("Текст должен быть с заглавной буквы");
+                paragraphInfo.Problems.Add("текст должен быть с заглавной буквы");
             }
 
             return levelNumber;
@@ -929,6 +1026,8 @@ namespace CheckSubsectionByOS_TUSUR
 
             }
 
+
+
             return null;
         }
 
@@ -1009,7 +1108,7 @@ namespace CheckSubsectionByOS_TUSUR
 
                 // регулярки на определение маркированного или нумерованного текста
                 var regexNumber = new System.Text.RegularExpressions.Regex("[1-9]");
-                var regexMarker = new System.Text.RegularExpressions.Regex("[•–▪o\\-]");
+                var regexMarker = new System.Text.RegularExpressions.Regex("[\\u2022\\u25aa\\u006f\\u2014\\u2013\\u202d]");
 
                 if (paragraph.Range.ListParagraphs.Count != 0) // если есть список
                 {
@@ -1347,7 +1446,6 @@ namespace CheckSubsectionByOS_TUSUR
                 {
                     case ParagraphInfo.ParagraphType.Текст:
                         {
-
                             if (paragraph.Format.Alignment != WdParagraphAlignment.wdAlignParagraphJustify)
                             {
                                 infos[i].Problems.Add("установить выравнивание текста по ширине");
@@ -1411,6 +1509,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                             foreach (Microsoft.Office.Interop.Word.Range word in paragraph.Range.Words)
                             {
+                                if (word.Text.Trim().Length == 0)
+                                {
+                                    continue;
+                                }
+
                                 int indexProblem = 0;
                                 bool hasProblem = false;
 
@@ -2216,6 +2319,11 @@ namespace CheckSubsectionByOS_TUSUR
                             int x = 0;
                             foreach (Microsoft.Office.Interop.Word.Range word in paragraph.Range.Words)
                             {
+                                if (word.Text.Trim().Length == 0)
+                                {
+                                    continue;
+                                }
+
                                 int indexProblem = 0;
                                 bool hasProblem = false;
 
@@ -2447,9 +2555,14 @@ namespace CheckSubsectionByOS_TUSUR
 
 
                             bool[] problems = new bool[13];
-                            int x = 0;
+
                             foreach (Microsoft.Office.Interop.Word.Range word in paragraph.Range.Words)
                             {
+                                if (word.Text.Trim().Length == 0)
+                                {
+                                    continue;
+                                }
+
                                 int indexProblem = 0;
                                 bool hasProblem = false;
 
@@ -2704,6 +2817,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                             foreach (Microsoft.Office.Interop.Word.Range word in paragraph.Range.Words)
                             {
+                                if (word.Text.Trim().Length == 0)
+                                {
+                                    continue;
+                                }
+
                                 int indexProblem = 0;
                                 bool hasProblem = false;
 
@@ -2948,10 +3066,15 @@ namespace CheckSubsectionByOS_TUSUR
                             }
 
 
-                            bool[] problems = new bool[13];
-                            int x = 0;
+                            bool[] problems = new bool[13]; 
+
                             foreach (Microsoft.Office.Interop.Word.Range word in paragraph.Range.Words)
                             {
+                                if (word.Text.Trim().Length == 0)
+                                {
+                                    continue;
+                                }
+
                                 int indexProblem = 0;
                                 bool hasProblem = false;
 
@@ -3194,6 +3317,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                             foreach (Microsoft.Office.Interop.Word.Range word in paragraph.Range.Words)
                             {
+                                if (word.Text.Trim().Length == 0)
+                                {
+                                    continue;
+                                }
+
                                 int indexProblem = 0;
                                 bool hasProblem = false;
 
@@ -3422,6 +3550,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                             foreach (Microsoft.Office.Interop.Word.Range word in paragraph.Range.Words)
                             {
+                                if (word.Text.Trim().Length == 0)
+                                {
+                                    continue;
+                                }
+
                                 int indexProblem = 0;
                                 bool hasProblem = false;
 
@@ -3650,6 +3783,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                             foreach (Microsoft.Office.Interop.Word.Range word in paragraph.Range.Words)
                             {
+                                if (word.Text.Trim().Length == 0)
+                                {
+                                    continue;
+                                }
+
                                 int indexProblem = 0;
                                 bool hasProblem = false;
 
@@ -3807,10 +3945,10 @@ namespace CheckSubsectionByOS_TUSUR
                                 if (hasProblem)
                                 {
                                     word.HighlightColorIndex = WdColorIndex.wdYellow;
-                                }
-
-                                checkSource(paragraph, infos[i], documentParams);
+                                }                               
                             }
+
+                            checkSource(paragraph, infos[i], documentParams);
                         }
                         break;
                     case ParagraphInfo.ParagraphType.ЗаголовокСпискаЛитературы:
@@ -3894,6 +4032,11 @@ namespace CheckSubsectionByOS_TUSUR
                             int x = 0;
                             foreach (Microsoft.Office.Interop.Word.Range word in paragraph.Range.Words)
                             {
+                                if (word.Text.Trim().Length == 0)
+                                {
+                                    continue;
+                                }
+
                                 int indexProblem = 0;
                                 bool hasProblem = false;
 
