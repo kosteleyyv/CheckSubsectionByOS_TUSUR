@@ -173,7 +173,7 @@ namespace CheckSubsectionByOS_TUSUR
         }
  private void checkFullDirButton_Click(object sender, EventArgs e)
         {
-            string startDir = System.IO.File.ReadAllText(openInputPathTextBox.Text);
+            string startDir = openInputPathTextBox.Text;
 
             string[] files = Directory.EnumerateFiles(startDir, "*.docx", SearchOption.AllDirectories).ToArray();
 
@@ -253,14 +253,9 @@ namespace CheckSubsectionByOS_TUSUR
                     // throw;
                 }
 
-                // TODO добавлено замечание про удаление гиперссылок на web-страницы
-                // TODO добавлено замечание запрете на использование Хабра и Википедии в качестве источников
-                // TODO добавлено условие (нам)|(вам)|(Нам)|(Вам) в регулярное выражения проверки на обезличивание
-                // TODO добавлен маркер длинного тире для определения маркированного списка
-                // TODO добавлены рекомендации по типам маркеров
-                // TODO проверка наличия табуляции в тексте
-                // TODO уточнено условие по именам с оператором простанства имен
-                // TODO уточнено условие по наличию точки после номера раздела
+
+                // TODO маркированный список с тире - ругается
+                // на работе котляровой анны проверить размер абзацного отступа - там некорретно высчитывает см в его попугаи
             }
         }
     }

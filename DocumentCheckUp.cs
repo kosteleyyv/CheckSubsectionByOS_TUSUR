@@ -68,12 +68,13 @@ namespace CheckSubsectionByOS_TUSUR
 
             public bool HasGeneralComments = false;
         }
-        private static bool isCyrilic(Microsoft.Office.Interop.Word.Range range)
+        private static bool isCyrilic(Microsoft.Office.Interop.Word.Range range, out bool isCouriewNew)
         {
             var regex = new System.Text.RegularExpressions.Regex("[а-я]");
             int cyrrilicCount = 0;
             int alphaWordCount = 0;
             var alpha = new Regex("[a-zа-я]");
+            int courierNewWordCount = 0;
 
             for (int i = 1; i <= range.Words.Count; i++)
             {
@@ -87,10 +88,15 @@ namespace CheckSubsectionByOS_TUSUR
                         cyrrilicCount++;
                     }
 
+                    if (range.Words[i].Font.Name == "Courier New")
+                    {
+                        courierNewWordCount++;
+                    }
+
                     alphaWordCount++;
                 }
             }
-
+            isCouriewNew = (courierNewWordCount * 100.0 / alphaWordCount > 90.0);
             return (100.0 * cyrrilicCount / alphaWordCount > 60);
         }
 
@@ -860,7 +866,7 @@ namespace CheckSubsectionByOS_TUSUR
         }
 
 
-        static string checkObjectTitle(Paragraph paragraph, ParagraphInfo paragraphInfo, DocumentParams documentParams, string marker, string level, int number)
+        static string checkObjectTitle(Paragraph paragraph, ParagraphInfo paragraphInfo, DocumentParams documentParams, string marker, string level,ref int number)
         {
             string text = paragraph.Range.Text.Trim();
 
@@ -971,22 +977,45 @@ namespace CheckSubsectionByOS_TUSUR
                 {
                     if (match.Value != $"{level}.{number}")
                     {
-                        paragraphInfo.Problems.Add($"не совпадает номер объекта с ожидаемым: {marker} {level}.{number}");
-
-                        var range = paragraph.Range;
-                        var find = range.Find;
-                        find.ClearFormatting();
-                        find.Text = match.Value;
-
-                        while (find.Execute())
+                        bool isHighlight = false;
+                        if (number == 1)
                         {
-                            if (range.End > paragraph.Range.End)
+                           var strings = match.Value.Split(".".ToCharArray(), StringSplitOptions.RemoveEmptyEntries);
+                            if (strings.Length >= 2)
                             {
-                                break;
+                                int.TryParse(strings[1], out number);
                             }
-                            range.HighlightColorIndex = WdColorIndex.wdYellow;
-                            range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
+
+                            if (match.Value != $"{level}.{number}")
+                            {
+                                paragraphInfo.Problems.Add($"не совпадает номер объекта с ожидаемым: {marker} {level}.{number}");
+                                isHighlight = true;
+                            }
                         }
+                        else
+                        {
+                            paragraphInfo.Problems.Add($"не совпадает номер объекта с ожидаемым: {marker} {level}.{number}");
+                            isHighlight = true;
+                        }
+
+                        if (isHighlight == true)
+                        {
+                            var range = paragraph.Range;
+                            var find = range.Find;
+                            find.ClearFormatting();
+                            find.Text = match.Value;
+
+                            while (find.Execute())
+                            {
+                                if (range.End > paragraph.Range.End)
+                                {
+                                    break;
+                                }
+                                range.HighlightColorIndex = WdColorIndex.wdYellow;
+                                range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
+                            }
+                        }
+                        
                     }
                 }
                 else
@@ -1091,8 +1120,9 @@ namespace CheckSubsectionByOS_TUSUR
                         infos.Add(paragraphInfo);
                         continue;
                     }
+                    bool isCourierNew = false;
                     // проверить длину текста
-                    if (!isCyrilic(paragraph.Range))
+                    if (!isCyrilic(paragraph.Range, out isCourierNew) || isCourierNew)
                     {
                         paragraphInfo.Type = ParagraphInfo.ParagraphType.Код;
                         infos.Add(paragraphInfo);
@@ -1149,9 +1179,10 @@ namespace CheckSubsectionByOS_TUSUR
                     infos.Add(paragraphInfo);
                     continue;
                 }
-
+                
+                bool isCourier = false;
                 // если текст из латинских букв - то это код
-                if (!isCyrilic(paragraph.Range))
+                if (!isCyrilic(paragraph.Range, out isCourier) || isCourier)
                 {
                     paragraphInfo.Type = ParagraphInfo.ParagraphType.Код;
                     infos.Add(paragraphInfo);
@@ -2728,7 +2759,7 @@ namespace CheckSubsectionByOS_TUSUR
                                              documentParams,
                                              ObjectTitleMarker.FigTitle,
                                              levelNumber,
-                                             indexImage);
+                                             ref indexImage);
 
                             infos[i].IndexObject = indexImage;
 
@@ -2987,7 +3018,7 @@ namespace CheckSubsectionByOS_TUSUR
                                                          documentParams,
                                                          ObjectTitleMarker.TableTitle,
                                                         levelNumber,
-                                                        indexTable);
+                                                        ref indexTable);
 
                             infos[i].IndexObject = indexTable;
 
@@ -3240,7 +3271,7 @@ namespace CheckSubsectionByOS_TUSUR
                                              documentParams,
                                              ObjectTitleMarker.CodeTitle,
                                              levelNumber,
-                                             indexCode);
+                                             ref indexCode);
 
                             infos[i].IndexObject = indexCode;
 
