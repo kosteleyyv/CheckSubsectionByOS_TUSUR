@@ -12,13 +12,13 @@ namespace CheckSubsectionByOS_TUSUR
 {
     internal class DocumentCheckUp
     {
-        public static class ObjectTitleMarker
+        public static class ObjectTitleStrings
         {
-            public static String FigTitle { get { return "Рисунок"; } }
+            public static String FigureTitle { get { return "Рисунок"; } }
             public static String TableTitle { get { return "Таблица"; } }
             public static String CodeTitle { get { return "Листинг"; } }
 
-            public static String FigRef { get { return "рис"; } }
+            public static String FigureRef { get { return "рис"; } }
             public static String TableRef { get { return "табл"; } }
             public static String CodeRef { get { return "лист"; } }
         }
@@ -26,7 +26,7 @@ namespace CheckSubsectionByOS_TUSUR
         private class ParagraphInfo
         {
             public int Index = 0;
-            public enum ParagraphType
+            public enum ParagraphClass
             {
                 Empty,
                 Текст,
@@ -45,22 +45,26 @@ namespace CheckSubsectionByOS_TUSUR
                 NumberList
             };
 
-            public ParagraphType Type = ParagraphType.Empty;
+            public ParagraphClass Type = ParagraphClass.Empty;
 
+            /// текст примечаний в документе
             public List<string> Problems = new List<string>();
 
-
+            /// номер таблицы, рисунка или листинга
             public int IndexObject = 0;
+            /// номер таблицы, рисунка или листинга в тексте работы
             public string NumberObjectInText = null;
+            /// есть ли ссылка на таблицу, рисунок или листинг в предыдущих абзацах
             public bool HasRef = true;
-
+            /// абзац - последний элемент списка
             public bool isLastListElement = false;
+            /// абзац - текст перед списком
             public bool isTextBeforeList = false;
-
-            public bool isCellTableA = false;
+            /// пустая ячейка с символом \a
+            public bool isEmptyTableCellWithA = false;
         }
 
-        private class DocumentParams
+        private class DocumentInfo
         {
             public bool HasTitle = false;
             public bool HasSource = false;
@@ -68,6 +72,155 @@ namespace CheckSubsectionByOS_TUSUR
 
             public bool HasGeneralComments = false;
         }
+
+        public static readonly string[] OperatorsList = new string[]
+    {
+        // Арифметические операторы
+        "+", "-", "*", "/", "%",
+        "++", "--",
+        
+        // Операторы присваивания
+        "=", "+=", "-=", "*=", "/=", "%=",
+        "&=", "|=", "^=", "<<=", ">>=",
+        
+        // Операторы сравнения
+        "==", "!=", ">", "<", ">=", "<=",
+        
+        // Логические операторы
+        "&&", "||", "!",
+        
+        // Побитовые операторы
+        "&", "|", "^", "~", "<<", ">>",
+        
+        // Операторы указателей и адресов
+        "&", "*", "->", ".*", "->*",
+        
+        // Операторы вызова и доступа
+       /* "()", "[]", ".",*/ "::",
+        
+        // Тернарный оператор
+        "?:",
+
+        "}","{"
+        
+        //// Операторы управления памятью
+        //"new", "delete", "new[]", "delete[]",
+        
+        //// Операторы приведения типов
+        //"static_cast", "dynamic_cast", "const_cast", "reinterpret_cast",
+        
+        //// Прочие операторы
+        //",", "sizeof", "typeid", "noexcept"
+    };
+
+        static readonly string[] KeywordsList = new string[] {
+    // Основные
+  
+    "auto",
+    "bool",
+    "break",
+    "case",
+    "catch",
+    "char",
+    "char8_t",
+    "char16_t",
+    "char32_t",
+    "class",
+    "const",
+    "constexpr",
+    "const_cast",
+    "continue",
+    "decltype",
+    "default",
+    "delete",
+    "do",
+    "double",
+    "dynamic_cast",
+    "else",
+    "enum",
+    "explicit",
+    "export",
+    "extern",
+    "false",
+    "float",
+    "for",
+    "friend",
+    "if",
+    "inline",
+    "int",
+    "long",
+    "namespace",
+    "new",
+    "noexcept",
+    "nullptr",
+    "operator",
+    "or",
+    "private",
+    "protected",
+    "public",
+    "reinterpret_cast",
+    "return",
+    "short",
+    "signed",
+    "sizeof",
+    "static",
+    "static_assert",
+    "static_cast",
+    "struct",
+    "switch",
+    "template",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typedef",
+    "typeid",
+    "typename",
+    "union",
+    "unsigned",
+    "using",
+    "virtual",
+    "void",
+    "volatile",
+    "wchar_t",
+    "while"
+       };
+
+
+        static readonly string ListMarkers = "\\u2022\\u25aa\\u006f\\u2014\\u2013\\u202d";
+        // \\u2022 круглый маркер •
+        // \\u25aa квадратный маркер ▪
+        // \\u006f o
+        // \\u2014 длинное тире
+        // \\u2013 короткое тире
+        // \\u202d ???
+
+        static readonly string OSListMarkers = "\\u2022\\u25aa\\u2013";
+
+        private static int ContainsKeyWordOrOperator(string word)
+        {
+            int count = 0;
+
+            for (int i = 0; i < OperatorsList.Length; i++)
+            {
+                if (word.Contains(OperatorsList[i]))
+                {
+                    count++;
+                }
+            }
+
+            for (int i = 0; i < KeywordsList.Length; i++)
+            {
+                if (word.Contains(KeywordsList[i]))
+                {
+                    count++;
+                    // break; ???
+                }
+            }
+
+            return count;
+        }
+
         private static bool isCyrilic(Microsoft.Office.Interop.Word.Range range, out bool isCouriewNew)
         {
             var regex = new System.Text.RegularExpressions.Regex("[а-я]");
@@ -83,10 +236,11 @@ namespace CheckSubsectionByOS_TUSUR
                 if (alpha.IsMatch(word)) // считаем,сколько букв
                 {
                     int n = regex.Matches(word).Count;
-                    if (n > 0.6 * word.Length) // если более 60% - кириллическое слово
+                    if (n > 0.6 * word.Length) // если более 60 % - кириллическое слово
                     {
                         cyrrilicCount++;
                     }
+                    // var style = range.Words[i].CharacterStyle as Style;
 
                     if (range.Words[i].Font.Name == "Courier New")
                     {
@@ -95,14 +249,21 @@ namespace CheckSubsectionByOS_TUSUR
 
                     alphaWordCount++;
                 }
+
+
             }
             isCouriewNew = (courierNewWordCount * 100.0 / alphaWordCount > 90.0);
+
+            // TODO проверь ключевые слова и операторы
+
             return (100.0 * cyrrilicCount / alphaWordCount > 60);
         }
 
-        private static string GetFirstWord(Microsoft.Office.Interop.Word.Range range)
+        /// извлекает первое "слово" из диапазоно, в т.ч. маркеры и цифры
+        private static string ExtractFirstWord(Microsoft.Office.Interop.Word.Range range)
         {
-            var regex = new System.Text.RegularExpressions.Regex("[1-9a-zа-я\\u2022\\u25aa\\u006f\\u2014\\u2013\\u202d]");
+            var regex = new System.Text.RegularExpressions.Regex($"[1-9a-zа-я{ListMarkers}]");
+
             for (int i = 1; i <= range.Words.Count; i++)
             {
                 string word = range.Words[i].Text.Trim().ToLower();
@@ -114,20 +275,22 @@ namespace CheckSubsectionByOS_TUSUR
             }
             return null;
         }
-        private static void checkSource(Paragraph paragraph, ParagraphInfo paragraphInfo, DocumentParams documentParams)
+
+        /// проверка библиографического описания
+        private static void checkSource(Paragraph paragraph, ParagraphInfo paragraphInfo, DocumentInfo documentParams)
         {
             var paragraphRange = paragraph.Range;
             string text = paragraphRange.Text;
             text = text.Trim();
-
 
             if (text.Length != 0 && text[text.Length - 1] != '.')
             {
                 paragraphInfo.Problems.Add("должна быть точка в конце абзаца");
             }
 
-            string[] denyURLs = new string[] { "wikipedia.org", "habr.com"  };
+            string[] denyURLs = new string[] { "wikipedia.org", "habr.com" };
             bool hasDenyURLs = false;
+
             for (int i = 0; i < denyURLs.Length; i++)
             {
                 var range = paragraph.Range;
@@ -135,17 +298,16 @@ namespace CheckSubsectionByOS_TUSUR
                 find.ClearFormatting();
                 find.Text = denyURLs[i];
 
-                
                 while (find.Execute())
                 {
                     if (range.End > paragraph.Range.End)
                     {
                         break;
                     }
+
                     hasDenyURLs = true;
                     range.HighlightColorIndex = WdColorIndex.wdYellow;
                     range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-
                 }
             }
 
@@ -156,27 +318,53 @@ namespace CheckSubsectionByOS_TUSUR
             }
         }
 
-        private static void checkText(Paragraph paragraph, ParagraphInfo paragraphInfo, DocumentParams documentParams)
+        // выделить цветом совпадения
+        static void Highlight(Paragraph paragraph, MatchCollection matches, WdColorIndex color = WdColorIndex.wdYellow)
+        {
+            for (int i = 0; i < matches.Count; i++)
+            {
+                var range = paragraph.Range;
+                var find = range.Find;
+                find.ClearFormatting();
+                find.Text = matches[i].Value;
+
+                while (find.Execute())
+                {
+                    if (range.End > paragraph.Range.End)
+                    {
+                        break;
+                    }
+                    range.HighlightColorIndex = color;
+                    range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
+                }
+            }
+        }
+        /// проверка абзаца обычного текста в т.ч. списка
+        private static void checkText(Paragraph paragraph, ParagraphInfo paragraphInfo, DocumentInfo documentParams)
         {
 
             string text = paragraph.Range.Text;
 
+            // с большой буквы и на конце точка
             bool isV1 = false;
+            // маркерованный или иной список
             bool isV2 = false;
+            // с большой буквы и на конце двоеточие
             bool isV3 = false;
 
-            if (paragraphInfo.Type == ParagraphInfo.ParagraphType.ЭлементНумерованногоСписка)
+            if (paragraphInfo.Type == ParagraphInfo.ParagraphClass.ЭлементНумерованногоСписка)
             {
+                // для параграфа определен нумерованный список
                 if (paragraph.Range.ListParagraphs.Count != 0)
                 {
+                    // извлекаем маркер и основной текст
                     string marker = paragraph.Range.ListFormat.ListString.Trim();
-
                     text = text.Trim();
 
+                    // маркер с точкой
                     if (marker.EndsWith("."))
                     {
                         isV1 = true;
-
                     }
                     else
                     {
@@ -185,6 +373,8 @@ namespace CheckSubsectionByOS_TUSUR
                 }
                 else
                 {
+                    // список не определен студентом, а номер введен вручную
+                    // извлекаем текст
                     text = text.Trim();
 
                     var regexNumber = new Regex("[1-9][0-9]*[.)]");
@@ -192,7 +382,6 @@ namespace CheckSubsectionByOS_TUSUR
                     if (regexNumber.IsMatch(text))
                     {
                         string marker = regexNumber.Match(text).Value;
-
                         if (marker.EndsWith("."))
                         {
                             isV1 = true;
@@ -203,8 +392,8 @@ namespace CheckSubsectionByOS_TUSUR
                         }
                     }
 
+                    // надо вручную проверить наличие пробела
                     var regexNumberWithWS = new Regex("[1-9][0-9]*[.)][\\s]");
-
                     if (regexNumberWithWS.IsMatch(text))
                     {
                         text = regexNumberWithWS.Replace(text, "");
@@ -218,7 +407,7 @@ namespace CheckSubsectionByOS_TUSUR
                 }
             }
 
-            if (paragraphInfo.Type == ParagraphInfo.ParagraphType.ЭлементМаркерованногоСписка)
+            if (paragraphInfo.Type == ParagraphInfo.ParagraphClass.ЭлементМаркерованногоСписка)
             {
                 isV2 = true;
 
@@ -226,16 +415,16 @@ namespace CheckSubsectionByOS_TUSUR
                 {
                     text = text.Trim();
 
-                    var regexMarker = new Regex("[\\u2022\\u25aa\\u006f\\u2014\\u2013\\u202d]");
+                    var regexMarker = new Regex($"[{ListMarkers}]");
 
-                    var regexMarkerWithWS = new Regex("[\\u2022\\u25aa\\u006f\\u2014\\u2013\\u202d][\\s]");
+                    var regexMarkerWithWS = new Regex($"[{ListMarkers}][\\s]");
 
-                    var regexMarkerAdvance = new Regex("[\u2013\u2022\u25aa]");
+                    var regexMarkerAdvance = new Regex($"[{OSListMarkers}]");
 
                     if (regexMarkerWithWS.IsMatch(text))
                     {
                         paragraphInfo.Problems.Add("рекомендуемый тип маркера списка: тире(–), точка(•), квадрат(▪)");
-                    }                    
+                    }
 
                     if (regexMarkerWithWS.IsMatch(text))
                     {
@@ -247,11 +436,12 @@ namespace CheckSubsectionByOS_TUSUR
                         paragraphInfo.Problems.Add("между маркером и предложением должен быть отступ в виде пробела или табуляции");
                     }
 
-                   
+
                 }
             }
 
-            if (paragraphInfo.Type == ParagraphInfo.ParagraphType.Текст)
+            // обычный текст
+            if (paragraphInfo.Type == ParagraphInfo.ParagraphClass.Текст)
             {
                 if (paragraphInfo.isTextBeforeList)
                 {
@@ -262,16 +452,13 @@ namespace CheckSubsectionByOS_TUSUR
                     isV1 = true;
                 }
 
-
                 if ((text.StartsWith("\t") || text.StartsWith(" ")))
                 {
                     paragraphInfo.Problems.Add("убрать пробел или табуляцию в начале предложения");
                 }
-
-
             }
 
-
+            // получили текст без маркера или номера
             text = text.Trim();
 
             if (isV1)
@@ -326,64 +513,24 @@ namespace CheckSubsectionByOS_TUSUR
             if (regex.IsMatch(text))
             {
                 paragraphInfo.Problems.Add("пишем обезличенно без я, мы, вы");
-
                 var matches = regex.Matches(text);
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches);
             }
 
+            // применили дефис не между двумя словами
             regex = new Regex("([^a-zA-Zа-яА-Я])(-|—)[^a-zA-Zа-яА-Я>]");
-
             if (regex.IsMatch(text))
             {
                 paragraphInfo.Problems.Add("использовать правильно тире – вместо дефиса - и длинного тире —");
-
                 var matches = regex.Matches(text);
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches);
             }
 
-
-            regex = new Regex("\\[[0-9]{1,3}\\]"); // TODO изменить регулярку с учетом 01 или 001
-
+            regex = new Regex("\\[[0-9]{1,3}\\]"); // TODO изменить регулярку без учетам 01 или 001
             if (regex.IsMatch(text))
             {
-
                 documentParams.HasReference = true;
 
-                
                 Regex[] variants = new[] {
                     new Regex("[\\S]\\[[0-9]{1,3}\\]"),     // между ссылкой и словом нет пробела
                     new Regex("[.][\\s]?\\[[0-9]{1,3}\\]"), // перед ссылкой точка
@@ -394,168 +541,74 @@ namespace CheckSubsectionByOS_TUSUR
                 if (variants[0].IsMatch(text)) // между ссылкой и словом нет пробела
                 {
                     var matches = variants[0].Matches(text);
-
                     paragraphInfo.Problems.Add("между ссылкой на источник и словом должен быть неразрывный пробел");
-
-                    for (int i = 0; i < matches.Count; i++)
-                    {
-                        var range = paragraph.Range;
-                        var find = range.Find;
-                        find.ClearFormatting();
-                        find.Text = matches[i].Value;
-
-                        while (find.Execute())
-                        {
-                            if (range.End > paragraph.Range.End)
-                            {
-                                break;
-                            }
-                            range.HighlightColorIndex = WdColorIndex.wdYellow;
-                            range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                        }
-                    }
+                    Highlight(paragraph, matches);
                 }
                 else
                 {   // используемый пробел не неразрывный!
                     if (!variants[2].IsMatch(text))
                     {
                         var matches = variants[3].Matches(text);
-
                         paragraphInfo.Problems.Add("между ссылкой на источник и словом должен быть неразрывный пробел (shift+ctrl+пробел)");
-
-                        for (int i = 0; i < matches.Count; i++)
-                        {
-                            var range = paragraph.Range;
-                            var find = range.Find;
-                            find.ClearFormatting();
-                            find.Text = matches[i].Value;
-
-                            while (find.Execute())
-                            {
-                                if (range.End > paragraph.Range.End)
-                                {
-                                    break;
-                                }
-                                range.HighlightColorIndex = WdColorIndex.wdYellow;
-                                range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                            }
-                        }
+                        Highlight(paragraph, matches);
                     }
                 }
-
 
                 if (variants[1].IsMatch(text))
                 {
                     var matches = variants[1].Matches(text);
-
                     paragraphInfo.Problems.Add("ссылка на источник входит в предложение, поэтому точка ставится после ссылки");
-
-                    for (int i = 0; i < matches.Count; i++)
-                    {
-                        var range = paragraph.Range;
-                        var find = range.Find;
-                        find.ClearFormatting();
-                        find.Text = matches[i].Value;
-
-                        while (find.Execute())
-                        {
-                            if (range.End > paragraph.Range.End)
-                            {
-                                break;
-                            }
-                            range.HighlightColorIndex = WdColorIndex.wdYellow;
-                            range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                        }
-                    }
+                    Highlight(paragraph, matches);
                 }
             }
 
-            regex = new Regex("[\"“‟”„''‚]");
+            regex = new Regex("[\"“‟”„''‚‘’`]");
             if (regex.IsMatch(text))
             {
                 var matches = regex.Matches(text);
-
                 paragraphInfo.Problems.Add("необходимо использовать «кавычки-ёлочки», а не кавычки-лапки и одиночные кавычки");
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches);
             }
 
-            regex = new Regex("[^«][a-zA-Zа-яА-Я]*_[a-zA-Zа-яА-Я]*[^»]");
+            regex = new Regex("[^«][a-zA-Zа-яА-Я]*_[a-zA-Zа-яА-Я]*([(][)])?[^»]");
 
             if (regex.IsMatch(text))
             {
-                // нашли слово, которое следует обернуть в кавычки
-                var matches = regex.Matches(text);
-
-                paragraphInfo.Problems.Add("латинские названия переменных следует обернуть в кавычки-елочки");
-
-                for (int i = 0; i < matches.Count; i++)
+                if (!new Regex("[«][a-zA-Zа-яА-Я]*_[a-zA-Zа-яА-Я]*([(][)])[»]").IsMatch(text))
                 {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
+                    // нашли слово, которое следует обернуть в кавычки
+                    var matches = regex.Matches(text);
+                    paragraphInfo.Problems.Add("латинские названия или названия с _ следует обернуть в кавычки-елочки");
+                    Highlight(paragraph, matches);
                 }
             }
 
-            regex = new Regex("[^«][a-zA-Zа-яА-Я]+::[a-zA-Zа-яА-Я]+[^»]");
+            regex = new Regex("[^«][a-zA-Zа-яА-Я]+::[a-zA-Zа-яА-Я]+([(][)])?[^»]");
+
+            if (regex.IsMatch(text))
+            {
+                if (!new Regex("[«][a-zA-Zа-яА-Я]+::[a-zA-Zа-яА-Я]+([(][)])[»]").IsMatch(text))
+                {
+                    var matches = regex.Matches(text);
+                    paragraphInfo.Problems.Add("латинские названия с пространством имен следует обернуть в кавычки-елочки");
+                    Highlight(paragraph, matches);
+                }
+            }
+
+            regex = new Regex("[(][)]");
 
             if (regex.IsMatch(text))
             {
                 var matches = regex.Matches(text);
-
-                paragraphInfo.Problems.Add("латинские названия с пространством имен следует обернуть в кавычки-елочки");
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                paragraphInfo.Problems.Add("не используем пустые () и не указываем () в названиях функций или методов");
+                Highlight(paragraph, matches);
             }
 
             regex = new Regex("[^«]([+*&^$~><=]|([\\+]{2})|([-]{2})|(->)|(>>)|(<<)|([\\+]=)|(-=)|([\\*]=)|(\\/=)|(>=)|(<=)|(!=)|(&&)|(::)|([\\|]{2}))[^»]");
 
             if (regex.IsMatch(text))
             {
-                bool isNotCpp = false;
+                bool isNotCppName = false;
                 var matches = regex.Matches(text);
 
                 for (int i = 0; i < matches.Count; i++)
@@ -565,7 +618,7 @@ namespace CheckSubsectionByOS_TUSUR
                         continue;
                     }
 
-                    isNotCpp = true;
+                    isNotCppName = true;
 
                     var range = paragraph.Range;
                     var find = range.Find;
@@ -583,7 +636,7 @@ namespace CheckSubsectionByOS_TUSUR
                     }
                 }
 
-                if (isNotCpp)
+                if (isNotCppName)
                 {
                     paragraphInfo.Problems.Add("знаки операторов следует обернуть в кавычки-елочки");
                 }
@@ -594,80 +647,24 @@ namespace CheckSubsectionByOS_TUSUR
             if (regex.IsMatch(text))
             {
                 var matches = regex.Matches(text);
-
                 paragraphInfo.Problems.Add("напоминание: не забывайте расшифровать аббревиатуру в месте ее первого использования, например, программное обеспечение (ПО)");
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdGray25;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches, WdColorIndex.wdGray50);
             }
 
             regex = new Regex("([A-ZА-Я]+[^a-zA-Zа-яА-Я]){3,}");
-
             if (regex.IsMatch(text))
             {
                 var matches = regex.Matches(text);
-
                 paragraphInfo.Problems.Add("не должно быть капсола в тексте (или у Вас три подряд аббревиатуры - так можно)");
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches);
             }
 
             regex = new Regex(".[\\s]{2,}.");
-
             if (regex.IsMatch(text))
             {
                 var matches = regex.Matches(text);
-
                 paragraphInfo.Problems.Add("обнаружен множественный пробел, нужно сократить до одного");
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches);
             }
 
             bool denyHyperlinks = false;
@@ -678,7 +675,7 @@ namespace CheckSubsectionByOS_TUSUR
                 {
                     string url = paragraph.Range.Hyperlinks[i].Address;
 
-                    if (url != null)
+                    if (url != null) // ссылка на сайт - нельзя
                     {
                         paragraph.Range.Hyperlinks[i].Range.HighlightColorIndex = WdColorIndex.wdYellow;
                         denyHyperlinks = true;
@@ -694,13 +691,10 @@ namespace CheckSubsectionByOS_TUSUR
 
 
             regex = new Regex("\\t");
-
             if (regex.IsMatch(text))
             {
                 var matches = regex.Matches(text);
-
                 paragraphInfo.Problems.Add("убрать знак табуляции внутри текста");
-
                 for (int i = 0; i < matches.Count; i++)
                 {
                     var range = paragraph.Range;
@@ -715,9 +709,9 @@ namespace CheckSubsectionByOS_TUSUR
                             break;
                         }
 
-                        var newRange = paragraph.Range;
+                        var newRange = paragraph.Range; // выделяем, задевая боковые буквы
                         newRange.Start = range.Start - 1;
-                        newRange.End = range.End +1;
+                        newRange.End = range.End + 1;
 
                         newRange.HighlightColorIndex = WdColorIndex.wdYellow;
                         range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
@@ -726,7 +720,8 @@ namespace CheckSubsectionByOS_TUSUR
             }
         }
 
-        static string checkHeader(Paragraph paragraph, ParagraphInfo paragraphInfo, DocumentParams documentParams)
+        /// проверка заголовка
+        static string checkHeader(Paragraph paragraph, ParagraphInfo paragraphInfo, DocumentInfo documentParams)
         {
             string levelNumber = "";
 
@@ -770,33 +765,13 @@ namespace CheckSubsectionByOS_TUSUR
                 levelNumber = marker.Split(".".ToCharArray(), StringSplitOptions.RemoveEmptyEntries)[0];
             }
 
-
-
             var regex = new Regex(".[\\s]{2,}.");
 
             if (regex.IsMatch(text))
             {
                 var matches = regex.Matches(text);
-
                 paragraphInfo.Problems.Add("обнаружен множественный пробел, нужно сократить до одного");
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches);
             }
 
             regex = new Regex("([^a-zA-Zа-яА-Я])(-|—)[^a-zA-Zа-яА-Я]");
@@ -804,52 +779,16 @@ namespace CheckSubsectionByOS_TUSUR
             if (regex.IsMatch(text))
             {
                 paragraphInfo.Problems.Add("использовать правильно тире – вместо дефиса - и длинного тире —");
-
                 var matches = regex.Matches(text);
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches);
             }
 
-            regex = new Regex("[\"“‟”„''‚]");
+            regex = new Regex("[\"“‟”„''‚‘’`]");
             if (regex.IsMatch(text))
             {
                 var matches = regex.Matches(text);
-
                 paragraphInfo.Problems.Add("необходимо использовать «кавычки-ёлочки», а не кавычки-лапки и одиночные кавычки");
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches);
             }
 
             if (text.EndsWith("."))
@@ -866,7 +805,7 @@ namespace CheckSubsectionByOS_TUSUR
         }
 
 
-        static string checkObjectTitle(Paragraph paragraph, ParagraphInfo paragraphInfo, DocumentParams documentParams, string marker, string level,ref int number)
+        static string checkObjectTitle(Paragraph paragraph, ParagraphInfo paragraphInfo, DocumentInfo documentParams, string marker, string level, ref int number)
         {
             string text = paragraph.Range.Text.Trim();
 
@@ -875,79 +814,24 @@ namespace CheckSubsectionByOS_TUSUR
             if (regex.IsMatch(text))
             {
                 var matches = regex.Matches(text);
-
                 paragraphInfo.Problems.Add("обнаружен множественный пробел, нужно сократить до одного");
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches);
             }
 
             regex = new Regex("([^a-zA-Zа-яА-Я])(-|—)[^a-zA-Zа-яА-Я]");
-
             if (regex.IsMatch(text))
             {
                 paragraphInfo.Problems.Add("использовать правильно тире – вместо дефиса - и длинного тире —");
-
                 var matches = regex.Matches(text);
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches);
             }
 
-            regex = new Regex("[\"“‟”„''‚]");
+            regex = new Regex("[\"“‟”„''‚‘’`]");
             if (regex.IsMatch(text))
             {
                 var matches = regex.Matches(text);
-
                 paragraphInfo.Problems.Add("необходимо использовать «кавычки-ёлочки», а не кавычки-лапки и одиночные кавычки");
-
-                for (int i = 0; i < matches.Count; i++)
-                {
-                    var range = paragraph.Range;
-                    var find = range.Find;
-                    find.ClearFormatting();
-                    find.Text = matches[i].Value;
-
-                    while (find.Execute())
-                    {
-                        if (range.End > paragraph.Range.End)
-                        {
-                            break;
-                        }
-                        range.HighlightColorIndex = WdColorIndex.wdYellow;
-                        range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
-                    }
-                }
+                Highlight(paragraph, matches);
             }
 
             if (text.EndsWith("."))
@@ -980,7 +864,7 @@ namespace CheckSubsectionByOS_TUSUR
                         bool isHighlight = false;
                         if (number == 1)
                         {
-                           var strings = match.Value.Split(".".ToCharArray(), StringSplitOptions.RemoveEmptyEntries);
+                            var strings = match.Value.Split(".".ToCharArray(), StringSplitOptions.RemoveEmptyEntries);
                             if (strings.Length >= 2)
                             {
                                 int.TryParse(strings[1], out number);
@@ -1015,7 +899,7 @@ namespace CheckSubsectionByOS_TUSUR
                                 range.Collapse(Microsoft.Office.Interop.Word.WdCollapseDirection.wdCollapseEnd);
                             }
                         }
-                        
+
                     }
                 }
                 else
@@ -1055,20 +939,30 @@ namespace CheckSubsectionByOS_TUSUR
 
             }
 
-
-
             return null;
         }
 
         public static void checkDocument(string pathDoc)
         {
             List<ParagraphInfo> infos = new List<ParagraphInfo>();
-            DocumentParams documentParams = new DocumentParams();
+            DocumentInfo documentParams = new DocumentInfo();
 
             var application = new Microsoft.Office.Interop.Word.Application();
             application.Visible = true;
 
             Document document = application.Documents.Open(pathDoc, false);
+
+            // удаляем комменты прошлого запуска
+            for (int i = document.Comments.Count; i >= 1; i--)
+            {
+                if (document.Comments[i].Author == "ROBOT")
+                {
+                    if (document.Comments[i].Replies.Count == 0)
+                    {
+                        document.Comments[i].DeleteRecursively();
+                    }
+                }
+            }
 
             int paragraphIndex = 0;
             // определение типа параграфа в соответствии с ParagraphInfo.ParagraphType
@@ -1079,17 +973,13 @@ namespace CheckSubsectionByOS_TUSUR
                 ParagraphInfo paragraphInfo = new ParagraphInfo();
                 paragraphInfo.Index = ++paragraphIndex;
 
-
-
                 // анализ текста
                 string text = paragraph.Range.Text.Trim().ToLower();
-
 
                 if (paragraph.Range.InlineShapes.Count != 0) // есть рисунок
                 {
                     // TODO если поставят один символ случайно, то надо сообщить???
-
-                    paragraphInfo.Type = ParagraphInfo.ParagraphType.Рисунок;
+                    paragraphInfo.Type = ParagraphInfo.ParagraphClass.Рисунок;
                     infos.Add(paragraphInfo);
                     continue;
                 }
@@ -1103,7 +993,7 @@ namespace CheckSubsectionByOS_TUSUR
 
                 if (documentParams.HasSource) // ниже заголовка списка источников находится их перечисление
                 {
-                    paragraphInfo.Type = ParagraphInfo.ParagraphType.БиблиографическоеОписаниеИсточника;
+                    paragraphInfo.Type = ParagraphInfo.ParagraphClass.БиблиографическоеОписаниеИсточника;
                     infos.Add(paragraphInfo);
                     continue;
                 }
@@ -1115,8 +1005,8 @@ namespace CheckSubsectionByOS_TUSUR
 
                     if (textTable.Length == 0)
                     {
-                        paragraphInfo.Type = ParagraphInfo.ParagraphType.Таблица;
-                        paragraphInfo.isCellTableA = true;
+                        paragraphInfo.Type = ParagraphInfo.ParagraphClass.Таблица;
+                        paragraphInfo.isEmptyTableCellWithA = true;
                         infos.Add(paragraphInfo);
                         continue;
                     }
@@ -1124,34 +1014,32 @@ namespace CheckSubsectionByOS_TUSUR
                     // проверить длину текста
                     if (!isCyrilic(paragraph.Range, out isCourierNew) || isCourierNew)
                     {
-                        paragraphInfo.Type = ParagraphInfo.ParagraphType.Код;
+                        paragraphInfo.Type = ParagraphInfo.ParagraphClass.Код;
                         infos.Add(paragraphInfo);
                         continue;
                     }
 
-                    paragraphInfo.Type = ParagraphInfo.ParagraphType.Таблица;
+                    paragraphInfo.Type = ParagraphInfo.ParagraphClass.Таблица;
                     infos.Add(paragraphInfo);
                     continue;
                 }
 
-
-
                 // регулярки на определение маркированного или нумерованного текста
                 var regexNumber = new System.Text.RegularExpressions.Regex("[1-9]");
-                var regexMarker = new System.Text.RegularExpressions.Regex("[\\u2022\\u25aa\\u006f\\u2014\\u2013\\u202d]");
+                var regexMarker = new System.Text.RegularExpressions.Regex($"[{ListMarkers}]");
 
                 if (paragraph.Range.ListParagraphs.Count != 0) // если есть список
                 {
                     switch (paragraph.Range.ListFormat.ListType) // разделение на маркерованный и нумерованный списки
                     {
                         case WdListType.wdListBullet:
-                            paragraphInfo.Type = ParagraphInfo.ParagraphType.ЭлементМаркерованногоСписка;
+                            paragraphInfo.Type = ParagraphInfo.ParagraphClass.ЭлементМаркерованногоСписка;
                             break;
                         case WdListType.wdListSimpleNumbering:
-                            paragraphInfo.Type = ParagraphInfo.ParagraphType.NumberList;
+                            paragraphInfo.Type = ParagraphInfo.ParagraphClass.NumberList;
                             break;
                         case WdListType.wdListMixedNumbering:
-                            paragraphInfo.Type = ParagraphInfo.ParagraphType.NumberList;
+                            paragraphInfo.Type = ParagraphInfo.ParagraphClass.NumberList;
                             break;
 
                         case WdListType.wdListOutlineNumbering:
@@ -1159,17 +1047,17 @@ namespace CheckSubsectionByOS_TUSUR
                             string marker = paragraph.Range.ListFormat.ListString.Trim();
                             if (regexNumber.IsMatch(marker))
                             {
-                                paragraphInfo.Type = ParagraphInfo.ParagraphType.NumberList;
+                                paragraphInfo.Type = ParagraphInfo.ParagraphClass.NumberList;
                             }
                             else
                             {
                                 if (regexMarker.IsMatch(marker))
                                 {
-                                    paragraphInfo.Type = ParagraphInfo.ParagraphType.ЭлементМаркерованногоСписка;
+                                    paragraphInfo.Type = ParagraphInfo.ParagraphClass.ЭлементМаркерованногоСписка;
                                 }
                                 else
                                 {   // неизвестный маркер
-                                    paragraphInfo.Type = ParagraphInfo.ParagraphType.ЭлементМаркерованногоСписка;
+                                    paragraphInfo.Type = ParagraphInfo.ParagraphClass.ЭлементМаркерованногоСписка;
                                 }
                             }
 
@@ -1179,31 +1067,31 @@ namespace CheckSubsectionByOS_TUSUR
                     infos.Add(paragraphInfo);
                     continue;
                 }
-                
+
                 bool isCourier = false;
                 // если текст из латинских букв - то это код
                 if (!isCyrilic(paragraph.Range, out isCourier) || isCourier)
                 {
-                    paragraphInfo.Type = ParagraphInfo.ParagraphType.Код;
+                    paragraphInfo.Type = ParagraphInfo.ParagraphClass.Код;
                     infos.Add(paragraphInfo);
                     continue;
                 }
 
                 // анализ первого слова. так как это может быть заголовок с номером, нумерованный текст или заголовки объектов
-                string firstWord = GetFirstWord(paragraph.Range);
+                string firstWord = ExtractFirstWord(paragraph.Range);
 
                 if (firstWord != null)
                 {
                     if (regexNumber.IsMatch(firstWord[0] + "")) // если с цифры - то или заголовок или номер
                     {
-                        paragraphInfo.Type = ParagraphInfo.ParagraphType.NumberText;
+                        paragraphInfo.Type = ParagraphInfo.ParagraphClass.NumberText;
                         infos.Add(paragraphInfo);
                         continue;
                     }
 
                     if (regexMarker.IsMatch(firstWord[0] + "")) // с маркера - маркированный текст
                     {
-                        paragraphInfo.Type = ParagraphInfo.ParagraphType.ЭлементМаркерованногоСписка;
+                        paragraphInfo.Type = ParagraphInfo.ParagraphClass.ЭлементМаркерованногоСписка;
                         infos.Add(paragraphInfo);
                         continue;
                     }
@@ -1212,21 +1100,21 @@ namespace CheckSubsectionByOS_TUSUR
 
                     if (firstWord.StartsWith("рисунок") || firstWord.StartsWith("рис.")) // подрисуночная подпись
                     {
-                        paragraphInfo.Type = ParagraphInfo.ParagraphType.ПодрисуночнаяПодпись;
+                        paragraphInfo.Type = ParagraphInfo.ParagraphClass.ПодрисуночнаяПодпись;
                         infos.Add(paragraphInfo);
                         continue;
                     }
 
                     if (firstWord.StartsWith("листинг")) // название листинга
                     {
-                        paragraphInfo.Type = ParagraphInfo.ParagraphType.НазваниеЛистинга;
+                        paragraphInfo.Type = ParagraphInfo.ParagraphClass.НазваниеЛистинга;
                         infos.Add(paragraphInfo);
                         continue;
                     }
 
                     if (firstWord.StartsWith("таблица") || firstWord.StartsWith("табл.")) // название таблицы
                     {
-                        paragraphInfo.Type = ParagraphInfo.ParagraphType.НазваниеТаблицы;
+                        paragraphInfo.Type = ParagraphInfo.ParagraphClass.НазваниеТаблицы;
                         infos.Add(paragraphInfo);
                         continue;
                     }
@@ -1237,13 +1125,13 @@ namespace CheckSubsectionByOS_TUSUR
                      text.StartsWith("список использованных источников") ||
                      text.StartsWith("список используемых источников"))
                 {
-                    paragraphInfo.Type = ParagraphInfo.ParagraphType.ЗаголовокСпискаЛитературы;
+                    paragraphInfo.Type = ParagraphInfo.ParagraphClass.ЗаголовокСпискаЛитературы;
                     documentParams.HasSource = true;
                     infos.Add(paragraphInfo);
                     continue;
                 }
 
-                paragraphInfo.Type = ParagraphInfo.ParagraphType.Текст;
+                paragraphInfo.Type = ParagraphInfo.ParagraphClass.Текст;
 
                 infos.Add(paragraphInfo);
             }
@@ -1255,22 +1143,22 @@ namespace CheckSubsectionByOS_TUSUR
             for (int i = 1; i < infos.Count - 1; i++)
             {
                 // пустые строки в коде помечаем как код
-                if (infos[i - 1].Type == ParagraphInfo.ParagraphType.Код &&
-                    infos[i + 1].Type == ParagraphInfo.ParagraphType.Код &&
-                    infos[i].Type != ParagraphInfo.ParagraphType.Код)
+                if (infos[i - 1].Type == ParagraphInfo.ParagraphClass.Код &&
+                    infos[i + 1].Type == ParagraphInfo.ParagraphClass.Код &&
+                    infos[i].Type != ParagraphInfo.ParagraphClass.Код)
                 {
-                    if (infos[i].Type == ParagraphInfo.ParagraphType.Empty ||
-                        infos[i].Type == ParagraphInfo.ParagraphType.Текст)
+                    if (infos[i].Type == ParagraphInfo.ParagraphClass.Empty ||
+                        infos[i].Type == ParagraphInfo.ParagraphClass.Текст)
                     {
-                        infos[i].Type = ParagraphInfo.ParagraphType.Код;
+                        infos[i].Type = ParagraphInfo.ParagraphClass.Код;
                     }
-                }               
+                }
             }
 
             // удаляем пустые строки, чтобы не мешали анализу
             for (int i = buffer.Count - 1; i >= 0; i--)
             {
-                if (buffer[i].Type == ParagraphInfo.ParagraphType.Empty)
+                if (buffer[i].Type == ParagraphInfo.ParagraphClass.Empty)
                 {
                     buffer.RemoveAt(i);
                 }
@@ -1279,14 +1167,14 @@ namespace CheckSubsectionByOS_TUSUR
             // если между двумя строками кода, есть кириллический текст или пустая строка - помечаем кодом
             for (int i = 1; i < buffer.Count - 1; i++)
             {
-                if (buffer[i - 1].Type == ParagraphInfo.ParagraphType.Код &&
-                    buffer[i + 1].Type == ParagraphInfo.ParagraphType.Код &&
-                    buffer[i].Type != ParagraphInfo.ParagraphType.Код)
+                if (buffer[i - 1].Type == ParagraphInfo.ParagraphClass.Код &&
+                    buffer[i + 1].Type == ParagraphInfo.ParagraphClass.Код &&
+                    buffer[i].Type != ParagraphInfo.ParagraphClass.Код)
                 {
-                    if (buffer[i].Type == ParagraphInfo.ParagraphType.Empty || // TODO бессмысленное условие - глянь
-                        buffer[i].Type == ParagraphInfo.ParagraphType.Текст)
+                    if (buffer[i].Type == ParagraphInfo.ParagraphClass.Empty || // TODO бессмысленное условие - глянь
+                        buffer[i].Type == ParagraphInfo.ParagraphClass.Текст)
                     {
-                        buffer[i].Type = ParagraphInfo.ParagraphType.Код;
+                        buffer[i].Type = ParagraphInfo.ParagraphClass.Код;
                     }
                 }
             }
@@ -1294,14 +1182,14 @@ namespace CheckSubsectionByOS_TUSUR
             // с учетом разметки простого текста обрабатываем заново пустые строки
             for (int i = 1; i < infos.Count - 1; i++)
             {
-                if (infos[i - 1].Type == ParagraphInfo.ParagraphType.Код &&
-                    infos[i + 1].Type == ParagraphInfo.ParagraphType.Код &&
-                    infos[i].Type != ParagraphInfo.ParagraphType.Код)
+                if (infos[i - 1].Type == ParagraphInfo.ParagraphClass.Код &&
+                    infos[i + 1].Type == ParagraphInfo.ParagraphClass.Код &&
+                    infos[i].Type != ParagraphInfo.ParagraphClass.Код)
                 {
-                    if (infos[i].Type == ParagraphInfo.ParagraphType.Empty ||
-                        infos[i].Type == ParagraphInfo.ParagraphType.Текст)
+                    if (infos[i].Type == ParagraphInfo.ParagraphClass.Empty ||
+                        infos[i].Type == ParagraphInfo.ParagraphClass.Текст)
                     {
-                        infos[i].Type = ParagraphInfo.ParagraphType.Код;
+                        infos[i].Type = ParagraphInfo.ParagraphClass.Код;
                     }
                 }
             }
@@ -1310,32 +1198,33 @@ namespace CheckSubsectionByOS_TUSUR
 
             for (int i = infos.Count - 1; i >= 0; i--)
             {
-                if (infos[i].Type == ParagraphInfo.ParagraphType.Empty)
+                if (infos[i].Type == ParagraphInfo.ParagraphClass.Empty)
                 {
                     infos.RemoveAt(i);
                 }
                 else
                 {
-                    break; //TODO у последних пустых строк косячный Range, ставит примечания в произвольные места
+                    break; // TODO у последних пустых строк косячный Range, ставит примечания в произвольные места
                 }
             }
 
 
-            for (int i = 0; i < infos.Count ; i++)
+            for (int i = 0; i < infos.Count; i++)
             {
-                if (infos[i].Type == ParagraphInfo.ParagraphType.Empty)
+                if (infos[i].Type == ParagraphInfo.ParagraphClass.Empty)
                 {
                     var firstLiteralRangeComment = document.Paragraphs[infos[i].Index].Range;
                     firstLiteralRangeComment.End = firstLiteralRangeComment.Start + 1;
 
-                    document.Comments.Add(firstLiteralRangeComment,
-                        "убрать пустые строки: отступы должны выполняться интервалами, а перенос на новый лист - свойством абзаца \"с новой страницы\"");
+                    var noteComment = document.Comments.Add(firstLiteralRangeComment,
+                        "# убрать пустые строки: отступы должны выполняться интервалами, а перенос на новый лист - свойством абзаца \"с новой страницы\"");
+                    noteComment.Author = "ROBOT";
                 }
             }
 
             for (int i = infos.Count - 1; i >= 0; i--)
             {
-                if (infos[i].Type == ParagraphInfo.ParagraphType.Empty)
+                if (infos[i].Type == ParagraphInfo.ParagraphClass.Empty)
                 {
                     infos.RemoveAt(i);
                 }
@@ -1344,53 +1233,53 @@ namespace CheckSubsectionByOS_TUSUR
             // в начале документа может быть две строки нумерованного текста заголовков - помечаем
             if (infos.Count > 2)
             {
-                if (infos[0].Type == ParagraphInfo.ParagraphType.NumberText || infos[0].Type == ParagraphInfo.ParagraphType.NumberList)
+                if (infos[0].Type == ParagraphInfo.ParagraphClass.NumberText || infos[0].Type == ParagraphInfo.ParagraphClass.NumberList)
                 {
-                    infos[0].Type = ParagraphInfo.ParagraphType.Заголовок;
+                    infos[0].Type = ParagraphInfo.ParagraphClass.Заголовок;
                     documentParams.HasTitle = true;
                 }
 
                 // TODO можно еще сравнить их уровни..
 
-                if (infos[1].Type == ParagraphInfo.ParagraphType.NumberText || infos[1].Type == ParagraphInfo.ParagraphType.NumberList)
+                if (infos[1].Type == ParagraphInfo.ParagraphClass.NumberText || infos[1].Type == ParagraphInfo.ParagraphClass.NumberList)
                 {
-                    infos[1].Type = ParagraphInfo.ParagraphType.Заголовок;
+                    infos[1].Type = ParagraphInfo.ParagraphClass.Заголовок;
                 }
             }
 
             // далее считаем, что одиночный нумерованный элемент - заголовок, иначе - список 
             for (int i = 1; i < infos.Count - 1; i++)
             {
-                bool topIsList = infos[i - 1].Type == ParagraphInfo.ParagraphType.NumberList ||
-                                  infos[i - 1].Type == ParagraphInfo.ParagraphType.NumberText ||
-                                  infos[i - 1].Type == ParagraphInfo.ParagraphType.ЭлементНумерованногоСписка; // уже могли пометить
+                bool topIsList = infos[i - 1].Type == ParagraphInfo.ParagraphClass.NumberList ||
+                                  infos[i - 1].Type == ParagraphInfo.ParagraphClass.NumberText ||
+                                  infos[i - 1].Type == ParagraphInfo.ParagraphClass.ЭлементНумерованногоСписка; // уже могли пометить
 
-                bool currentIsList = infos[i].Type == ParagraphInfo.ParagraphType.NumberList ||
-                                     infos[i].Type == ParagraphInfo.ParagraphType.NumberText ||
-                                     infos[i].Type == ParagraphInfo.ParagraphType.ЭлементНумерованногоСписка;
+                bool currentIsList = infos[i].Type == ParagraphInfo.ParagraphClass.NumberList ||
+                                     infos[i].Type == ParagraphInfo.ParagraphClass.NumberText ||
+                                     infos[i].Type == ParagraphInfo.ParagraphClass.ЭлементНумерованногоСписка;
 
-                bool bottomIsList = infos[i + 1].Type == ParagraphInfo.ParagraphType.NumberList ||
-                                    infos[i + 1].Type == ParagraphInfo.ParagraphType.NumberText ||
-                                    infos[i + 1].Type == ParagraphInfo.ParagraphType.ЭлементНумерованногоСписка; // уже могли пометить
+                bool bottomIsList = infos[i + 1].Type == ParagraphInfo.ParagraphClass.NumberList ||
+                                    infos[i + 1].Type == ParagraphInfo.ParagraphClass.NumberText ||
+                                    infos[i + 1].Type == ParagraphInfo.ParagraphClass.ЭлементНумерованногоСписка; // уже могли пометить
 
                 if (currentIsList)
                 {
                     if (!topIsList && !bottomIsList) // соседи не нумерованные - значит заголовок
                     {
-                        infos[i].Type = ParagraphInfo.ParagraphType.Заголовок;
+                        infos[i].Type = ParagraphInfo.ParagraphClass.Заголовок;
                     }
                     else
                     { // иначе список - как и его друзья
-                        infos[i].Type = ParagraphInfo.ParagraphType.ЭлементНумерованногоСписка;
+                        infos[i].Type = ParagraphInfo.ParagraphClass.ЭлементНумерованногоСписка;
 
                         if (topIsList)
                         {
-                            infos[i - 1].Type = ParagraphInfo.ParagraphType.ЭлементНумерованногоСписка;
+                            infos[i - 1].Type = ParagraphInfo.ParagraphClass.ЭлементНумерованногоСписка;
                         }
 
                         if (bottomIsList)
                         {
-                            infos[i + 1].Type = ParagraphInfo.ParagraphType.ЭлементНумерованногоСписка;
+                            infos[i + 1].Type = ParagraphInfo.ParagraphClass.ЭлементНумерованногоСписка;
                         }
 
                         if (!bottomIsList)
@@ -1400,7 +1289,7 @@ namespace CheckSubsectionByOS_TUSUR
 
                         if (!topIsList)
                         {
-                            if (infos[i - 1].Type == ParagraphInfo.ParagraphType.Текст)
+                            if (infos[i - 1].Type == ParagraphInfo.ParagraphClass.Текст)
                             {
                                 infos[i - 1].isTextBeforeList = true;
                             }
@@ -1415,21 +1304,21 @@ namespace CheckSubsectionByOS_TUSUR
 
             for (int i = 1; i < infos.Count - 1; i++)
             {
-                if (infos[i].Type == ParagraphInfo.ParagraphType.ЭлементМаркерованногоСписка)
+                if (infos[i].Type == ParagraphInfo.ParagraphClass.ЭлементМаркерованногоСписка)
                 {
-                    if (infos[i - 1].Type == ParagraphInfo.ParagraphType.Текст)
+                    if (infos[i - 1].Type == ParagraphInfo.ParagraphClass.Текст)
                     {
                         infos[i - 1].isTextBeforeList = true;
                     }
                     else
                     {
-                        if (infos[i - 1].Type != ParagraphInfo.ParagraphType.ЭлементМаркерованногоСписка)
+                        if (infos[i - 1].Type != ParagraphInfo.ParagraphClass.ЭлементМаркерованногоСписка)
                         {
                             infos[i].Problems.Add("перед списком должен быть абзац текста, оканчивающийся двоеточием");
                         }
                     }
 
-                    if (infos[i + 1].Type != ParagraphInfo.ParagraphType.ЭлементМаркерованногоСписка)
+                    if (infos[i + 1].Type != ParagraphInfo.ParagraphClass.ЭлементМаркерованногоСписка)
                     {
                         infos[i].isLastListElement = true;
                     }
@@ -1441,41 +1330,40 @@ namespace CheckSubsectionByOS_TUSUR
             int indexCode = 1;
             int indexTable = 1;
 
-
-
             List<ParagraphInfo> references = new List<ParagraphInfo>();
 
             // проверяем наличие названий рисунков, листингов и таблиц
             for (int i = 1; i < infos.Count - 1; i++)
             {
-                if (infos[i].Type == ParagraphInfo.ParagraphType.Рисунок && infos[i + 1].Type != ParagraphInfo.ParagraphType.ПодрисуночнаяПодпись)
+                if (infos[i].Type == ParagraphInfo.ParagraphClass.Рисунок && infos[i + 1].Type != ParagraphInfo.ParagraphClass.ПодрисуночнаяПодпись)
                 {
                     infos[i].Problems.Add("под рисунком должна быть подрисуночная подпись");
                 }
 
-                if (infos[i].Type == ParagraphInfo.ParagraphType.Код
-                    && infos[i + 1].Type != ParagraphInfo.ParagraphType.НазваниеЛистинга
-                    && infos[i + 1].Type != ParagraphInfo.ParagraphType.Код)
+                if (infos[i].Type == ParagraphInfo.ParagraphClass.Код
+                    && infos[i + 1].Type != ParagraphInfo.ParagraphClass.НазваниеЛистинга
+                    && infos[i + 1].Type != ParagraphInfo.ParagraphClass.Код)
                 {
                     infos[i].Problems.Add("под листингом должна быть подпись (Листинг 1.1 – Название листинга)");
                     // TODO считаем, что толкьо под, хотя по требованиям АВ можно и над
                 }
 
-                if (infos[i].Type == ParagraphInfo.ParagraphType.Таблица && infos[i - 1].Type != ParagraphInfo.ParagraphType.НазваниеТаблицы
-                    && infos[i - 1].Type != ParagraphInfo.ParagraphType.Таблица)
+                if (infos[i].Type == ParagraphInfo.ParagraphClass.Таблица && infos[i - 1].Type != ParagraphInfo.ParagraphClass.НазваниеТаблицы
+                    && infos[i - 1].Type != ParagraphInfo.ParagraphClass.Таблица)
                 {
                     infos[i].Problems.Add("над таблицей быть название (подпись)");
                 }
             }
 
+            // обработка форматирования
             for (int i = 0; i < infos.Count; i++)
-            {  
+            {
                 var paragraph = document.Paragraphs[infos[i].Index];
                 application.Selection.SetRange(paragraph.Range.Start, paragraph.Range.End);
 
                 switch (infos[i].Type)
                 {
-                    case ParagraphInfo.ParagraphType.Текст:
+                    case ParagraphInfo.ParagraphClass.Текст:
                         {
                             if (paragraph.Format.Alignment != WdParagraphAlignment.wdAlignParagraphJustify)
                             {
@@ -1486,16 +1374,6 @@ namespace CheckSubsectionByOS_TUSUR
                             {
                                 infos[i].Problems.Add("добавить красную строку в 1,25 см");
                             }
-
-                            //if (paragraph.Format.KeepTogether != 1)
-                            //{
-                            //    infos[i].problems.Add("");
-                            //}
-
-                            //if (paragraph.Format.KeepWithNext != 1)
-                            //{
-                            //    infos[i].problems.Add("");
-                            //}
 
                             if (paragraph.Format.LeftIndent != application.CentimetersToPoints(0))
                             {
@@ -1517,21 +1395,14 @@ namespace CheckSubsectionByOS_TUSUR
                                 infos[i].Problems.Add("убрать уровень текста");
                             }
 
-                            //if (paragraph.Format.PageBreakBefore != 1)
-                            //{
-                            //    infos[i].problems.Add("");
-                            //}
-
                             // !((Microsoft.Office.Interop.Word.Style)paragraph.Range.get_Style()).NoSpaceBetweenParagraphsOfSameStyle
-                            if (((paragraph.Format.SpaceAfter != 0 ||
-                                paragraph.Format.SpaceAfterAuto != 0)))
+                            if (paragraph.Format.SpaceAfter != 0 || paragraph.Format.SpaceAfterAuto != 0)
                             {
                                 infos[i].Problems.Add("убрать интервал после абзаца");
                             }
 
-                            if ((paragraph.Format.SpaceBeforeAuto != 0 ||
-                                paragraph.Format.SpaceBefore != 0) &&
-                                (i != 0 && infos[i - 1].Type != ParagraphInfo.ParagraphType.Таблица))
+                            if ((paragraph.Format.SpaceBeforeAuto != 0 || paragraph.Format.SpaceBefore != 0) &&
+                                (i != 0 && infos[i - 1].Type != ParagraphInfo.ParagraphClass.Таблица))
                             {
                                 infos[i].Problems.Add("убрать интервал до абзаца");
                             }
@@ -1672,7 +1543,11 @@ namespace CheckSubsectionByOS_TUSUR
                                 //}
 
                                 indexProblem++;
-
+                                if (word.Font.Name == "")
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (word.Font.Name != "Times New Roman")
                                 {
                                     if (!problems[indexProblem])
@@ -1686,6 +1561,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Size == 9999999)
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (!(word.Font.Size == 14 || word.Font.Size == 12))
                                 {
                                     if (!problems[indexProblem])
@@ -1710,7 +1590,7 @@ namespace CheckSubsectionByOS_TUSUR
                         }
 
                         break;
-                    case ParagraphInfo.ParagraphType.Код:
+                    case ParagraphInfo.ParagraphClass.Код:
                         {
                             string text = paragraph.Range.Text.Replace('\a', ' ').Trim();
 
@@ -1909,6 +1789,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Name == "")
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (word.Font.Name != "Courier New")
                                 {
                                     if (!problems[indexProblem])
@@ -1922,6 +1807,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Size == 9999999)
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (!(word.Font.Size >= 9 && word.Font.Size <= 12))
                                 {
                                     if (!problems[indexProblem])
@@ -1944,7 +1834,7 @@ namespace CheckSubsectionByOS_TUSUR
                         }
 
                         break;
-                    case ParagraphInfo.ParagraphType.Рисунок:
+                    case ParagraphInfo.ParagraphClass.Рисунок:
                         {
                             if (paragraph.Format.Alignment != WdParagraphAlignment.wdAlignParagraphCenter)
                             {
@@ -2013,7 +1903,7 @@ namespace CheckSubsectionByOS_TUSUR
 
                         }
                         break;
-                    case ParagraphInfo.ParagraphType.Таблица:
+                    case ParagraphInfo.ParagraphClass.Таблица:
                         {
                             string text = paragraph.Range.Text.Replace('\a', ' ').Trim();
 
@@ -2216,7 +2106,11 @@ namespace CheckSubsectionByOS_TUSUR
                                 //}
 
                                 indexProblem++;
-
+                                if (word.Font.Name == "")
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (word.Font.Name != "Times New Roman")
                                 {
                                     if (!problems[indexProblem])
@@ -2230,6 +2124,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Size == 9999999)
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (!(word.Font.Size == 14 || word.Font.Size == 12))
                                 {
                                     if (!problems[indexProblem])
@@ -2269,7 +2168,7 @@ namespace CheckSubsectionByOS_TUSUR
                             //}
                         }
                         break;
-                    case ParagraphInfo.ParagraphType.Заголовок:
+                    case ParagraphInfo.ParagraphClass.Заголовок:
                         {
                             if (paragraph.Format.Alignment != WdParagraphAlignment.wdAlignParagraphCenter)
                             {
@@ -2477,6 +2376,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Name == "")
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (word.Font.Name != "Times New Roman")
                                 {
                                     if (!problems[indexProblem])
@@ -2490,6 +2394,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Size == 9999999)
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (!(word.Font.Size == 14 || word.Font.Size == 12))
                                 {
                                     if (!problems[indexProblem])
@@ -2520,7 +2429,7 @@ namespace CheckSubsectionByOS_TUSUR
 
                         }
                         break;
-                    case ParagraphInfo.ParagraphType.ПодрисуночнаяПодпись:
+                    case ParagraphInfo.ParagraphClass.ПодрисуночнаяПодпись:
                         {
                             if (paragraph.Format.Alignment != WdParagraphAlignment.wdAlignParagraphCenter)
                             {
@@ -2721,6 +2630,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Name == "")
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (word.Font.Name != "Times New Roman")
                                 {
                                     if (!problems[indexProblem])
@@ -2734,6 +2648,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Size == 9999999)
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (!(word.Font.Size == 14 || word.Font.Size == 12))
                                 {
                                     if (!problems[indexProblem])
@@ -2757,7 +2676,7 @@ namespace CheckSubsectionByOS_TUSUR
                                              paragraph,
                                              infos[i],
                                              documentParams,
-                                             ObjectTitleMarker.FigTitle,
+                                             ObjectTitleStrings.FigureTitle,
                                              levelNumber,
                                              ref indexImage);
 
@@ -2773,7 +2692,7 @@ namespace CheckSubsectionByOS_TUSUR
                             indexImage++;
                         }
                         break;
-                    case ParagraphInfo.ParagraphType.НазваниеТаблицы:
+                    case ParagraphInfo.ParagraphClass.НазваниеТаблицы:
                         {
                             if (paragraph.Format.Alignment != WdParagraphAlignment.wdAlignParagraphLeft)
                             {
@@ -2980,6 +2899,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Name == "")
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (word.Font.Name != "Times New Roman")
                                 {
                                     if (!problems[indexProblem])
@@ -2993,6 +2917,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Size == 9999999)
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (!(word.Font.Size == 14 || word.Font.Size == 12))
                                 {
                                     if (!problems[indexProblem])
@@ -3016,7 +2945,7 @@ namespace CheckSubsectionByOS_TUSUR
                                                         paragraph,
                                                         infos[i],
                                                          documentParams,
-                                                         ObjectTitleMarker.TableTitle,
+                                                         ObjectTitleStrings.TableTitle,
                                                         levelNumber,
                                                         ref indexTable);
 
@@ -3032,7 +2961,7 @@ namespace CheckSubsectionByOS_TUSUR
                             indexTable++;
                         }
                         break;
-                    case ParagraphInfo.ParagraphType.НазваниеЛистинга:
+                    case ParagraphInfo.ParagraphClass.НазваниеЛистинга:
                         {
                             if (paragraph.Format.Alignment != WdParagraphAlignment.wdAlignParagraphCenter)
                             {
@@ -3097,7 +3026,7 @@ namespace CheckSubsectionByOS_TUSUR
                             }
 
 
-                            bool[] problems = new bool[13]; 
+                            bool[] problems = new bool[13];
 
                             foreach (Microsoft.Office.Interop.Word.Range word in paragraph.Range.Words)
                             {
@@ -3233,6 +3162,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Name == "")
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (word.Font.Name != "Times New Roman")
                                 {
                                     if (!problems[indexProblem])
@@ -3246,6 +3180,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Size == 9999999)
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (!(word.Font.Size == 14 || word.Font.Size == 12))
                                 {
                                     if (!problems[indexProblem])
@@ -3269,7 +3208,7 @@ namespace CheckSubsectionByOS_TUSUR
                                              paragraph,
                                              infos[i],
                                              documentParams,
-                                             ObjectTitleMarker.CodeTitle,
+                                             ObjectTitleStrings.CodeTitle,
                                              levelNumber,
                                              ref indexCode);
 
@@ -3284,7 +3223,7 @@ namespace CheckSubsectionByOS_TUSUR
                             indexCode++;
                         }
                         break;
-                    case ParagraphInfo.ParagraphType.ЭлементНумерованногоСписка:
+                    case ParagraphInfo.ParagraphClass.ЭлементНумерованногоСписка:
                         {
                             if (paragraph.Format.Alignment != WdParagraphAlignment.wdAlignParagraphJustify)
                             {
@@ -3339,7 +3278,7 @@ namespace CheckSubsectionByOS_TUSUR
                             }
 
                             if ((paragraph.Format.SpaceBeforeAuto != 0 ||
-                                paragraph.Format.SpaceBefore != 0) && (i != 0 && infos[i - 1].Type != ParagraphInfo.ParagraphType.Таблица))
+                                paragraph.Format.SpaceBefore != 0) && (i != 0 && infos[i - 1].Type != ParagraphInfo.ParagraphClass.Таблица))
                             {
                                 infos[i].Problems.Add("убрать интервал до абзаца");
                             }
@@ -3481,6 +3420,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Name == "")
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (word.Font.Name != "Times New Roman")
                                 {
                                     if (!problems[indexProblem])
@@ -3494,6 +3438,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Size == 9999999)
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (!(word.Font.Size == 14 || word.Font.Size == 12))
                                 {
                                     if (!problems[indexProblem])
@@ -3517,7 +3466,7 @@ namespace CheckSubsectionByOS_TUSUR
                             checkText(paragraph, infos[i], documentParams);
                         }
                         break;
-                    case ParagraphInfo.ParagraphType.ЭлементМаркерованногоСписка:
+                    case ParagraphInfo.ParagraphClass.ЭлементМаркерованногоСписка:
                         {
                             if (paragraph.Format.Alignment != WdParagraphAlignment.wdAlignParagraphJustify)
                             {
@@ -3572,7 +3521,7 @@ namespace CheckSubsectionByOS_TUSUR
                             }
 
                             if ((paragraph.Format.SpaceBeforeAuto != 0 ||
-                                paragraph.Format.SpaceBefore != 0) && (i != 0 && infos[i - 1].Type != ParagraphInfo.ParagraphType.Таблица))
+                                paragraph.Format.SpaceBefore != 0) && (i != 0 && infos[i - 1].Type != ParagraphInfo.ParagraphClass.Таблица))
                             {
                                 infos[i].Problems.Add("убрать интервал до абзаца");
                             }
@@ -3727,6 +3676,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Size == 9999999)
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (!(word.Font.Size == 14 || word.Font.Size == 12))
                                 {
                                     if (!problems[indexProblem])
@@ -3750,7 +3704,7 @@ namespace CheckSubsectionByOS_TUSUR
                             checkText(paragraph, infos[i], documentParams);
                         }
                         break;
-                    case ParagraphInfo.ParagraphType.БиблиографическоеОписаниеИсточника:
+                    case ParagraphInfo.ParagraphClass.БиблиографическоеОписаниеИсточника:
                         {
                             if (paragraph.Format.Alignment != WdParagraphAlignment.wdAlignParagraphJustify)
                             {
@@ -3805,7 +3759,7 @@ namespace CheckSubsectionByOS_TUSUR
                             }
 
                             if ((paragraph.Format.SpaceBeforeAuto != 0 ||
-                                paragraph.Format.SpaceBefore != 0) && (i != 0 && infos[i - 1].Type != ParagraphInfo.ParagraphType.Таблица))
+                                paragraph.Format.SpaceBefore != 0) && (i != 0 && infos[i - 1].Type != ParagraphInfo.ParagraphClass.Таблица))
                             {
                                 infos[i].Problems.Add("убрать интервал до абзаца");
                             }
@@ -3947,6 +3901,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Name == "")
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (word.Font.Name != "Times New Roman")
                                 {
                                     if (!problems[indexProblem])
@@ -3960,6 +3919,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Size == 9999999)
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (!(word.Font.Size == 14 || word.Font.Size == 12))
                                 {
                                     if (!problems[indexProblem])
@@ -3976,13 +3940,13 @@ namespace CheckSubsectionByOS_TUSUR
                                 if (hasProblem)
                                 {
                                     word.HighlightColorIndex = WdColorIndex.wdYellow;
-                                }                               
+                                }
                             }
 
                             checkSource(paragraph, infos[i], documentParams);
                         }
                         break;
-                    case ParagraphInfo.ParagraphType.ЗаголовокСпискаЛитературы:
+                    case ParagraphInfo.ParagraphClass.ЗаголовокСпискаЛитературы:
                         {
                             if (paragraph.Format.Alignment != WdParagraphAlignment.wdAlignParagraphCenter)
                             {
@@ -4203,6 +4167,11 @@ namespace CheckSubsectionByOS_TUSUR
 
                                 indexProblem++;
 
+                                if (word.Font.Size == 9999999)
+                                {
+                                    word.HighlightColorIndex = WdColorIndex.wdGray25;
+                                }
+                                else
                                 if (!(word.Font.Size == 14 || word.Font.Size == 12))
                                 {
                                     if (!problems[indexProblem])
@@ -4231,9 +4200,9 @@ namespace CheckSubsectionByOS_TUSUR
             // проверяем наличие ссылки в тексте на объекты
             for (int i = 0; i < infos.Count; i++)
             {
-                if (infos[i].Type == ParagraphInfo.ParagraphType.Текст
-                    || infos[i].Type == ParagraphInfo.ParagraphType.ЭлементНумерованногоСписка
-                    || infos[i].Type == ParagraphInfo.ParagraphType.ЭлементМаркерованногоСписка)
+                if (infos[i].Type == ParagraphInfo.ParagraphClass.Текст
+                    || infos[i].Type == ParagraphInfo.ParagraphClass.ЭлементНумерованногоСписка
+                    || infos[i].Type == ParagraphInfo.ParagraphClass.ЭлементМаркерованногоСписка)
                 {
                     string text = document.Paragraphs[infos[i].Index].Range.Text.Trim().ToLower();
 
@@ -4244,14 +4213,14 @@ namespace CheckSubsectionByOS_TUSUR
                             string objectname = "объект";
                             switch (references[j].Type)
                             {
-                                case ParagraphInfo.ParagraphType.ПодрисуночнаяПодпись:
-                                    objectname = ObjectTitleMarker.FigRef;
+                                case ParagraphInfo.ParagraphClass.ПодрисуночнаяПодпись:
+                                    objectname = ObjectTitleStrings.FigureRef;
                                     break;
-                                case ParagraphInfo.ParagraphType.НазваниеТаблицы:
-                                    objectname = ObjectTitleMarker.TableRef;
+                                case ParagraphInfo.ParagraphClass.НазваниеТаблицы:
+                                    objectname = ObjectTitleStrings.TableRef;
                                     break;
-                                case ParagraphInfo.ParagraphType.НазваниеЛистинга:
-                                    objectname = ObjectTitleMarker.CodeRef;
+                                case ParagraphInfo.ParagraphClass.НазваниеЛистинга:
+                                    objectname = ObjectTitleStrings.CodeRef;
                                     break;
                             }
                             var regex = new Regex(objectname + ".{2,20}" + references[j].NumberObjectInText);
@@ -4273,23 +4242,22 @@ namespace CheckSubsectionByOS_TUSUR
                     string objectname = "объект";
                     switch (infos[i].Type)
                     {
-                        case ParagraphInfo.ParagraphType.ПодрисуночнаяПодпись:
-                            objectname = ObjectTitleMarker.FigTitle;
+                        case ParagraphInfo.ParagraphClass.ПодрисуночнаяПодпись:
+                            objectname = ObjectTitleStrings.FigureTitle;
                             break;
-                        case ParagraphInfo.ParagraphType.НазваниеТаблицы:
-                            objectname = ObjectTitleMarker.TableTitle;
+                        case ParagraphInfo.ParagraphClass.НазваниеТаблицы:
+                            objectname = ObjectTitleStrings.TableTitle;
                             break;
-                        case ParagraphInfo.ParagraphType.НазваниеЛистинга:
-                            objectname = ObjectTitleMarker.CodeTitle;
+                        case ParagraphInfo.ParagraphClass.НазваниеЛистинга:
+                            objectname = ObjectTitleStrings.CodeTitle;
                             break;
                     }
 
                     infos[i].Problems.Add($"отсутствует ссылка на {objectname} " + infos[i].NumberObjectInText + " перед объектом");
                 }
             }
-
-
-            string summaryComment = "Общие замечания по документу:";
+           
+            string summaryComment = "# Общие замечания по документу:";
 
             // наличие списка литературы
             if (!documentParams.HasSource)
@@ -4343,7 +4311,8 @@ namespace CheckSubsectionByOS_TUSUR
             // общие замечания по документу
             if (documentParams.HasGeneralComments)
             {
-                document.Paragraphs[1].Range.Comments.Add(document.Paragraphs[1].Range.Words[1], summaryComment);
+               var noteComment = document.Paragraphs[1].Range.Comments.Add(document.Paragraphs[1].Range.Words[1], summaryComment);
+                noteComment.Author = "ROBOT";
             }
 
             // общие замечания по отдельным абзацам
@@ -4361,11 +4330,12 @@ namespace CheckSubsectionByOS_TUSUR
                         }
                         var firstLiteralRangeComment = document.Paragraphs[infos[i].Index].Range;
                         firstLiteralRangeComment.End = firstLiteralRangeComment.Start + 1;
-                        document.Comments.Add(firstLiteralRangeComment, comment);
+                        var noteComment = document.Comments.Add(firstLiteralRangeComment, comment);
+                        noteComment.Author = "ROBOT";
                     }
 
                 }
-               catch { } // есть скрытые пустые абзацы в таблицах - на них не ставит примечания, ирод
+                catch { } // TODO есть скрытые пустые абзацы в таблицах - на них не ставит примечания, ирод
             }
 
 

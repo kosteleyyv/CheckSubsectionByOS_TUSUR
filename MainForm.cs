@@ -15,6 +15,7 @@ namespace CheckSubsectionByOS_TUSUR
 {
     public partial class MainForm : Form
     {
+        string nottedDocumentPattern = "__";
         public MainForm()
         {
             InitializeComponent();
@@ -22,7 +23,7 @@ namespace CheckSubsectionByOS_TUSUR
             if (File.Exists("params.xml"))
             {
 
-               XmlSerializer xmlSerializer = new XmlSerializer(typeof(Params));
+                XmlSerializer xmlSerializer = new XmlSerializer(typeof(Params));
 
                 // десериализуем объект
                 using (FileStream fs = new FileStream("params.xml", FileMode.OpenOrCreate))
@@ -35,10 +36,10 @@ namespace CheckSubsectionByOS_TUSUR
             dateStartScanPicker.Value = parameters.ScanDateFrom;
         }
         Params parameters = new Params();
-         public class Params
+        public class Params
         {
-            public  string InputPath { get; set; } = "F:\\input";
-            public  string OutputPath { get; set; } = "F:\\output";
+            public string InputPath { get; set; } = "F:\\input";
+            public string OutputPath { get; set; } = "F:\\output";
 
             public DateTime ScanDateFrom { get; set; } = DateTime.Now;
         }
@@ -105,7 +106,7 @@ namespace CheckSubsectionByOS_TUSUR
                     }
                 }
             }
-            catch 
+            catch
             {
                 MessageBox.Show("Не могу очистить директорию сохранения, возможно открыт файл!");
                 return;
@@ -116,7 +117,7 @@ namespace CheckSubsectionByOS_TUSUR
 
             try
             {
-                if (files.Length != 0 )
+                if (files.Length != 0)
                 {
                     foreach (var file in files)
                     {
@@ -142,10 +143,8 @@ namespace CheckSubsectionByOS_TUSUR
                     }
                     catch (Exception exp)
                     {
-                        
-                        MessageBox.Show("Проблема с обработкой документа:"+ exp.Message);
 
-                       // throw;
+                        MessageBox.Show("Проблема с обработкой документа:" + exp.Message);
                     }
                 }
 
@@ -155,7 +154,7 @@ namespace CheckSubsectionByOS_TUSUR
             {
                 MessageBox.Show("Документы формата docx не найдены!");
             }
- 
+
         }
 
         private void MainForm_FormClosed(object sender, FormClosedEventArgs e)
@@ -171,22 +170,26 @@ namespace CheckSubsectionByOS_TUSUR
                 xmlSerializer.Serialize(fs, parameters);
             }
         }
- private void checkFullDirButton_Click(object sender, EventArgs e)
+        private void checkFullDirButton_Click(object sender, EventArgs e)
         {
             string startDir = openInputPathTextBox.Text;
 
             string[] files = Directory.EnumerateFiles(startDir, "*.docx", SearchOption.AllDirectories).ToArray();
 
-            string pattern = "__";
+            int checkedDocumentCount = 0;
+
+            dateStartScanPicker.Value = dateStartScanPicker.Value.AddHours( -dateStartScanPicker.Value.Hour );
 
             foreach (string currentFile in files)
             {
-                if (new System.IO.FileInfo(currentFile).CreationTime >= dateStartScanPicker.Value &&
-                    !new System.IO.FileInfo(currentFile).Name.StartsWith(pattern))
+                bool isOkDate = new System.IO.FileInfo(currentFile).CreationTime >= dateStartScanPicker.Value;
+                bool isNoteedDocument = new System.IO.FileInfo(currentFile).Name.StartsWith(nottedDocumentPattern);
+
+                if ( isOkDate && !isNoteedDocument )
                 {
                     string directory = new System.IO.FileInfo(currentFile).DirectoryName;
                     string fileName = new System.IO.FileInfo(currentFile).Name;
-                    string outFileName = directory + "\\" + pattern + fileName;
+                    string outFileName = directory + "\\" + nottedDocumentPattern + fileName;
 
                     try
                     {
@@ -201,33 +204,30 @@ namespace CheckSubsectionByOS_TUSUR
                     try
                     {
                         DocumentCheckUp.checkDocument(outFileName);
+                        checkedDocumentCount++;
                     }
                     catch (Exception exp)
                     {
-
                         MessageBox.Show("Проблема с обработкой документа:" + exp.Message);
-
-                        // throw;
                     }
                 }
             }
 
-
-            MessageBox.Show("Проверка завершена!");
+            MessageBox.Show("Проверка завершена! Всего проверено: " + checkedDocumentCount.ToString());
 
         }
 
         private void checkOneWorkButton_Click(object sender, EventArgs e)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog();
-            openFileDialog.Filter = "документ подраздела|*.docx";
+            openFileDialog.Filter = "документ с подразделом|*.docx";
+
             if (openFileDialog.ShowDialog() == DialogResult.OK)
-            {
-                string pattern = "__";
+            {               
                 string currentFile = openFileDialog.FileName;
                 string directory = new System.IO.FileInfo(currentFile).DirectoryName;
                 string fileName = new System.IO.FileInfo(currentFile).Name;
-                string outFileName = directory + "\\" + pattern + fileName;
+                string outFileName = directory + "\\" + nottedDocumentPattern + fileName;
 
                 try
                 {
@@ -241,9 +241,9 @@ namespace CheckSubsectionByOS_TUSUR
 
                 try
                 {
-                    DocumentCheckUp.checkDocument(outFileName);
                     filePathTextBox.Text = outFileName;
-                    MessageBox.Show("Проверка завершена!");                    
+                    DocumentCheckUp.checkDocument(outFileName);                    
+                    MessageBox.Show("Проверка завершена!");
                 }
                 catch (Exception exp)
                 {
